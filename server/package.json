@@ -1,0 +1,33 @@
+{
+    "name": "recruit-pro-server",
+    "version": "1.0.0",
+    "description": "Backend for RecruitPro with proctoring and notifications",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+        "start": "node index.js",
+        "dev": "nodemon index.js",
+        "seed": "node seed.js"
+    },
+    "dependencies": {
+        "bcryptjs": "^3.0.3",
+        "cloudinary": "^1.41.3",
+        "cookie-parser": "^1.4.7",
+        "cors": "^2.8.5",
+        "dotenv": "^16.6.1",
+        "express": "^4.21.1",
+        "express-session": "^1.18.2",
+        "jsonwebtoken": "^9.0.3",
+        "mongodb": "^7.0.0",
+        "multer": "^2.0.2",
+        "multer-storage-cloudinary": "^4.0.0",
+        "nodemailer": "^6.9.15",
+        "passport": "^0.7.0",
+        "passport-github2": "^0.1.12",
+        "passport-google-oauth20": "^2.0.0",
+        "uuid": "^10.0.0"
+    },
+    "devDependencies": {
+        "nodemon": "^3.1.7"
+    }
+}
