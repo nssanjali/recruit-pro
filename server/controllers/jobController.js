@@ -2,10 +2,18 @@ import Job from '../models/Job.js';
 
 // @desc    Get all jobs
 // @route   GET /api/jobs
-// @access  Public
+// @access  Private (Recruiter, Admin)
 export const getJobs = async (req, res) => {
     try {
-        const jobs = await Job.find();
+        let query = {};
+
+        // If user is a recruiter, only show their jobs
+        // If user is admin, show all jobs
+        if (req.user.role === 'recruiter') {
+            query.postedBy = req.user._id;
+        }
+
+        const jobs = await Job.find(query);
         res.status(200).json({
             success: true,
             count: jobs.length,
