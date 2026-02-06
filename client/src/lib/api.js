@@ -150,7 +150,13 @@ export const deleteQueueItem = async (queueId) => {
 // Job API
 export const getJobs = async () => {
     try {
-        const response = await fetch(`${API_URL}/jobs`);
+        const token = localStorage.getItem('token');
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+        const response = await fetch(`${API_URL}/jobs`, {
+            headers
+        });
+
         if (!response.ok) throw new Error('Failed to fetch jobs');
         const result = await response.json();
         return result.data;
@@ -190,6 +196,69 @@ export const createJob = async (jobData) => {
         }
 
         return await response.json();
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
+export const getJobCandidates = async (id) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/jobs/${id}/candidates`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        if (!response.ok) throw new Error('Failed to fetch candidates');
+        const result = await response.json();
+        return result.data;
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
+
+
+export const applyJob = async (jobId) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/jobs/${jobId}/apply`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to apply to job');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
+export const checkJobMatch = async (jobId) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/jobs/${jobId}/check-match`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to check match');
+        }
+
+        const result = await response.json();
+        return result;
     } catch (error) {
         console.error('API Error:', error);
         throw error;

@@ -11,7 +11,8 @@ export function Signup({ onSwitchToLogin }) {
         name: '',
         email: '',
         password: '',
-        confirmPassword: ''
+        confirmPassword: '',
+        role: 'candidate'
     });
 
     const [loading, setLoading] = useState(false);
@@ -46,7 +47,7 @@ export function Signup({ onSwitchToLogin }) {
                 name: formData.name,
                 email: formData.email,
                 password: formData.password,
-                role: 'candidate'
+                role: formData.role
             };
 
             const response = await fetch('http://localhost:5000/api/auth/register', {
@@ -65,7 +66,13 @@ export function Signup({ onSwitchToLogin }) {
 
             localStorage.setItem('token', data.token);
             localStorage.setItem('user', JSON.stringify(data.user));
-            navigate('/candidate');
+
+            // Redirect based on role
+            if (data.user.role === 'recruiter') {
+                navigate('/recruiter');
+            } else {
+                navigate('/candidate');
+            }
         } catch (err) {
             setError(err.message);
         } finally {
@@ -141,6 +148,34 @@ export function Signup({ onSwitchToLogin }) {
                                         className="pl-10 h-11"
                                         required
                                     />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">I want to</label>
+                                <div className="grid grid-cols-2 gap-3 p-1 bg-slate-100/80 rounded-xl border border-slate-200">
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, role: 'candidate' })}
+                                        className={`flex items-center justify-center gap-2 h-10 rounded-lg text-sm font-bold transition-all ${formData.role === 'candidate'
+                                            ? 'bg-white text-[#4285f4] shadow-sm ring-1 ring-slate-200'
+                                            : 'text-slate-500 hover:text-slate-700'
+                                            }`}
+                                    >
+                                        <User className="w-4 h-4" />
+                                        Find Jobs
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, role: 'recruiter' })}
+                                        className={`flex items-center justify-center gap-2 h-10 rounded-lg text-sm font-bold transition-all ${formData.role === 'recruiter'
+                                            ? 'bg-white text-[#8b5cf6] shadow-sm ring-1 ring-slate-200'
+                                            : 'text-slate-500 hover:text-slate-700'
+                                            }`}
+                                    >
+                                        <ShieldCheck className="w-4 h-4" />
+                                        Hire Talent
+                                    </button>
                                 </div>
                             </div>
 

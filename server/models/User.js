@@ -10,6 +10,10 @@ export const User = {
         return await getCollection().findOne(query);
     },
 
+    async find(query = {}) {
+        return await getCollection().find(query).toArray();
+    },
+
     async findById(id) {
         if (!id) return null;
         try {

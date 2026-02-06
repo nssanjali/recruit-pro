@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Users,
     Calendar as CalendarIcon,
@@ -47,6 +48,7 @@ import { JobPosting } from './JobPosting';
 import { getJobs } from '../lib/api';
 
 export function RecruiterDashboard({ user }) {
+    const navigate = useNavigate();
     const [assignedCandidates, setAssignedCandidates] = useState([]);
     const [todaySchedule, setTodaySchedule] = useState([]);
     const [notifications, setNotifications] = useState([]);
@@ -243,7 +245,12 @@ export function RecruiterDashboard({ user }) {
                                                     </div>
                                                 </div>
                                             </div>
-                                            <Badge variant="success" className="bg-emerald-50 text-emerald-600 border-emerald-100 uppercase tracking-widest text-[9px]">ACTIVE</Badge>
+                                            <div className="flex items-center gap-4">
+                                                <Badge variant="success" className="bg-emerald-50 text-emerald-600 border-emerald-100 uppercase tracking-widest text-[9px]">ACTIVE</Badge>
+                                                <Button size="sm" variant="outline" onClick={() => navigate(`/jobs/${job._id}/candidates`)}>
+                                                    View Candidates
+                                                </Button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
