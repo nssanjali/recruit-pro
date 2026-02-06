@@ -150,7 +150,12 @@ export const deleteQueueItem = async (queueId) => {
 // Job API
 export const getJobs = async () => {
     try {
-        const response = await fetch(`${API_URL}/jobs`);
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/jobs`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
         if (!response.ok) throw new Error('Failed to fetch jobs');
         const result = await response.json();
         return result.data;

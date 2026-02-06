@@ -51,6 +51,19 @@ export const User = {
         return result;
     },
 
+    async find(query = {}) {
+        return await getCollection().find(query).toArray();
+    },
+
+    async countDocuments(query = {}) {
+        return await getCollection().countDocuments(query);
+    },
+
+    async findByIdAndDelete(id) {
+        const _id = typeof id === 'string' ? new ObjectId(id) : id;
+        return await getCollection().deleteOne({ _id });
+    },
+
     // Instance-like methods (require user object)
     async comparePassword(user, enteredPassword) {
         if (!user.password) return false;

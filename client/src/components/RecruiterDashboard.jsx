@@ -43,7 +43,6 @@ import {
     AvatarFallback
 } from './ui';
 import { motion, AnimatePresence } from 'motion/react';
-import { JobPosting } from './JobPosting';
 import { getJobs } from '../lib/api';
 
 export function RecruiterDashboard({ user }) {
@@ -53,7 +52,6 @@ export function RecruiterDashboard({ user }) {
     const [aiInsights, setAiInsights] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [showJobPosting, setShowJobPosting] = useState(false);
     const [jobs, setJobs] = useState([]);
 
     useEffect(() => {
@@ -83,8 +81,8 @@ export function RecruiterDashboard({ user }) {
                         <BrainCircuit className="w-8 h-8 text-[#8b5cf6] animate-pulse" />
                     </div>
                 </div>
-                <h3 className="text-xl font-bold text-slate-900 tracking-tight">RecruitPro Intel</h3>
-                <p className="mt-2 text-slate-500 font-medium">Calibrating talent matching engine...</p>
+                <h3 className="text-xl font-bold text-slate-900 tracking-tight">Loading</h3>
+                <p className="mt-2 text-slate-500 font-medium">Loading dashboard...</p>
             </div>
         );
     }
@@ -95,15 +93,11 @@ export function RecruiterDashboard({ user }) {
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                 <div className="space-y-1">
                     <div className="flex items-center gap-3">
-                        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Recruiter Command</h2>
-                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-950 text-white text-[10px] font-black uppercase tracking-widest shadow-lg">
-                            <Zap className="w-2.5 h-2.5 text-yellow-400 fill-yellow-400" />
-                            Nexus v2.0
-                        </div>
+                        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Recruiter Dashboard</h2>
                     </div>
                     <p className="text-slate-500 text-sm flex items-center gap-2">
                         <ShieldCheck className="w-4 h-4 text-[#10b981]" />
-                        Encrypted connection to Google Gemini Core established
+                        Manage candidates and track hiring progress
                     </p>
                 </div>
 
@@ -111,7 +105,7 @@ export function RecruiterDashboard({ user }) {
                     <div className="relative group">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-[#4285f4] transition-colors" />
                         <Input
-                            placeholder="Query talent nexus..."
+                            placeholder="Search candidates..."
                             className="pl-10 w-full sm:w-72 bg-white border-slate-200 focus:ring-[#4285f4]/20 transition-all shadow-sm"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -119,11 +113,11 @@ export function RecruiterDashboard({ user }) {
                     </div>
                     <Button variant="outline" className="border-slate-200 bg-white gap-2 hover:bg-slate-50 shadow-sm">
                         <Settings2 className="w-4 h-4" />
-                        Config
+                        Settings
                     </Button>
                     <Button className="bg-slate-900 hover:bg-slate-800 text-white shadow-xl shadow-slate-900/10 gap-2 font-bold px-6">
                         <Sparkles className="w-4 h-4 text-yellow-400" />
-                        AI Sync
+                        Refresh
                     </Button>
                 </div>
             </div>
@@ -133,8 +127,8 @@ export function RecruiterDashboard({ user }) {
                 {[
                     { label: 'Active Pipeline', value: '0', icon: Users, color: 'from-[#4285f4] to-[#06b6d4]', trend: 'Steady' },
                     { label: 'Pending Feedback', value: '0', icon: MessageSquare, color: 'from-[#8b5cf6] to-[#d946ef]', trend: 'Optimal' },
-                    { label: 'Success Velocity', value: '98%', icon: TrendingUp, color: 'from-[#10b981] to-[#34d399]', trend: '+4%' },
-                    { label: 'AI Confidence', value: '99.2%', icon: BrainCircuit, color: 'from-[#f59e0b] to-[#fbbf24]', trend: 'Stable' },
+                    { label: 'Success Rate', value: '98%', icon: TrendingUp, color: 'from-[#10b981] to-[#34d399]', trend: '+4%' },
+                    { label: 'Performance', value: '99.2%', icon: BrainCircuit, color: 'from-[#f59e0b] to-[#fbbf24]', trend: 'Stable' },
                 ].map((stat, index) => {
                     const Icon = stat.icon;
                     return (
@@ -164,7 +158,7 @@ export function RecruiterDashboard({ user }) {
                 })}
             </div>
 
-            {/* Intelligence Dashboard */}
+            {/* Main Dashboard */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* Main Pipeline Area */}
                 <div className="lg:col-span-8 space-y-8">
@@ -172,8 +166,8 @@ export function RecruiterDashboard({ user }) {
                         <CardHeader className="p-8 border-b border-slate-50">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div>
-                                    <CardTitle className="text-xl font-bold text-slate-900 tracking-tight">Intelligence Pipeline</CardTitle>
-                                    <p className="text-sm text-slate-500 font-medium">Active screening & automated evaluation</p>
+                                    <CardTitle className="text-xl font-bold text-slate-900 tracking-tight">Candidate Pipeline</CardTitle>
+                                    <p className="text-sm text-slate-500 font-medium">Active screening & evaluation</p>
                                 </div>
                                 <Tabs defaultValue="all" className="w-auto">
                                     <TabsList className="bg-slate-100/80 p-1 rounded-xl">
@@ -198,20 +192,14 @@ export function RecruiterDashboard({ user }) {
                                         <Sparkles className="w-4 h-4 text-[#8b5cf6]" />
                                     </motion.div>
                                 </div>
-                                <h4 className="text-xl font-bold text-slate-900 mb-2">Nexus is Empty</h4>
+                                <h4 className="text-xl font-bold text-slate-900 mb-2">No Candidates Yet</h4>
                                 <p className="text-slate-500 text-sm max-w-sm mb-10 font-medium leading-relaxed">
-                                    The talent marketplace is currently being indexed by our AI core. Sit back while we find the perfect matches for your open roles.
+                                    Start reviewing candidates for your open positions. New applications will appear here.
                                 </p>
                                 <div className="flex items-center gap-4">
                                     <Button variant="outline" className="border-slate-200 font-bold px-8 py-6 rounded-2xl hover:bg-slate-50 transition-all">
                                         <LayoutDashboard className="w-4 h-4 mr-2" />
                                         Browse All
-                                    </Button>
-                                    <Button
-                                        onClick={() => setShowJobPosting(true)}
-                                        className="bg-[#4285f4] hover:bg-[#3b79db] text-white font-bold px-8 py-6 rounded-2xl shadow-lg shadow-[#4285f4]/20"
-                                    >
-                                        Create Job Post
                                     </Button>
                                 </div>
                             </div>
@@ -222,10 +210,7 @@ export function RecruiterDashboard({ user }) {
                     {jobs.length > 0 && (
                         <Card className="border-slate-100 shadow-sm overflow-hidden bg-white">
                             <CardHeader className="p-8 border-b border-slate-50">
-                                <div className="flex items-center justify-between">
-                                    <CardTitle className="text-xl font-bold text-slate-900 tracking-tight">Active Job Openings</CardTitle>
-                                    <Button variant="outline" size="sm" onClick={() => setShowJobPosting(true)}>+ Post Job</Button>
-                                </div>
+                                <CardTitle className="text-xl font-bold text-slate-900 tracking-tight">Active Job Openings</CardTitle>
                             </CardHeader>
                             <CardContent className="p-0">
                                 <div className="divide-y divide-slate-50">
@@ -252,7 +237,7 @@ export function RecruiterDashboard({ user }) {
                     )}
                 </div>
 
-                {/* Intelligence Feeds */}
+                {/* Activity Feed */}
                 <div className="lg:col-span-4 space-y-8">
                     {/* User Status */}
                     <Card className="border-slate-100 shadow-sm bg-white overflow-hidden relative">
@@ -291,18 +276,6 @@ export function RecruiterDashboard({ user }) {
                 </div>
             </div>
 
-            {/* Hero Modal for Job Posting */}
-            <AnimatePresence>
-                {showJobPosting && (
-                    <JobPosting
-                        onComplete={() => {
-                            setShowJobPosting(false);
-                            fetchData();
-                        }}
-                        onCancel={() => setShowJobPosting(false)}
-                    />
-                )}
-            </AnimatePresence>
         </div>
     );
 }

@@ -92,10 +92,10 @@ export function RecruiterAssignment() {
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
-                <h3 className="text-foreground">AI-Powered Recruiter Assignment</h3>
+                <h3 className="text-foreground">Recruiter Assignment</h3>
                 <Badge className="bg-gradient-to-r from-[#4285f4] to-[#8b5cf6]">
                   <Sparkles className="w-3 h-3 mr-1" />
-                  Gemini AI
+                  Smart Matching
                 </Badge>
               </div>
               <p className="text-muted-foreground">
@@ -181,7 +181,7 @@ export function RecruiterAssignment() {
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
-                            <p className="text-sm font-medium text-foreground">AI Recommendation</p>
+                            <p className="text-sm font-medium text-foreground">Recommendation</p>
                             <Badge variant="outline" className="border-[#8b5cf6] text-[#8b5cf6]">
                               {assignment.matchScore}% Match
                             </Badge>

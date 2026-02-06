@@ -12,11 +12,11 @@ const router = express.Router();
 
 router.route('/')
     .get(protect, getJobs)
-    .post(protect, authorize('recruiter', 'admin'), createJob);
+    .post(protect, authorize('admin', 'company_admin'), createJob);
 
 router.route('/:id')
     .get(getJob)
-    .put(protect, authorize('recruiter', 'admin'), updateJob)
-    .delete(protect, authorize('recruiter', 'admin'), deleteJob);
+    .put(protect, authorize('admin', 'company_admin'), updateJob)
+    .delete(protect, authorize('admin', 'company_admin'), deleteJob);
 
 export default router;

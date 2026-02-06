@@ -1,88 +1,50 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Mail, Send, Calendar, CheckCircle2, Clock, Bot, Sparkles, Bell, Database, MessageSquare, Zap, ShieldCheck, Filter, Search } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Tabs, TabsContent, TabsList, TabsTrigger, Input } from './ui';
 import { motion } from 'motion/react';
 
 export function CommunicationCenter() {
-    const [communications, setCommunications] = useState([
-        {
-            id: 1,
-            type: 'email',
-            subject: 'Interview Confirmation - Senior ML Engineer',
-            recipient: 'sarah.johnson@email.com',
-            status: 'sent',
-            sentAt: '2 hours ago',
-            template: 'Interview Confirmation',
-            automated: true,
-            content: 'Your interview has been scheduled for Oct 23, 2025 at 2 PM'
-        },
-        {
-            id: 2,
-            type: 'reminder',
-            subject: 'Interview Reminder - Tomorrow at 10 AM',
-            recipient: 'michael.brown@email.com',
-            status: 'scheduled',
-            scheduledFor: 'Tomorrow 9:00 AM',
-            template: 'Interview Reminder',
-            automated: true,
-            content: 'Reminder: Your interview is scheduled for tomorrow'
-        },
-        {
-            id: 3,
-            type: 'calendar',
-            subject: 'Google Meet Invite - DevOps Engineer Interview',
-            recipient: 'emma.davis@email.com',
-            status: 'sent',
-            sentAt: '1 hour ago',
-            template: 'Calendar Invite',
-            automated: true,
-            content: 'Calendar invite with Google Meet link sent'
-        },
-        {
-            id: 4,
-            type: 'email',
-            subject: 'Interview Confirmation - Data Scientist',
-            recipient: 'david.lee@email.com',
-            status: 'sent',
-            sentAt: '30 minutes ago',
-            template: 'Interview Confirmation',
-            automated: true,
-            content: 'Your interview has been scheduled for Oct 26, 2025 at 3 PM'
-        }
-    ]);
+    const [communications, setCommunications] = useState([]);
 
-    const [storedCommunications] = useState([
-        {
-            candidate: 'Sarah Johnson',
-            totalMessages: 8,
-            lastContact: '2 hours ago',
-            interviews: 2,
-            status: 'Active'
-        },
-        {
-            candidate: 'Michael Brown',
-            totalMessages: 5,
-            lastContact: '1 day ago',
-            interviews: 1,
-            status: 'Scheduled'
-        },
-        {
-            candidate: 'Emma Davis',
-            totalMessages: 12,
-            lastContact: '1 hour ago',
-            interviews: 3,
-            status: 'Active'
-        },
-        {
-            candidate: 'David Lee',
-            totalMessages: 6,
-            lastContact: '30 minutes ago',
-            interviews: 1,
-            status: 'Active'
-        }
-    ]);
+    const [storedCommunications, setStoredCommunications] = useState([]);
+    const [stats, setStats] = useState({
+        emailsSent: 0,
+        scheduledReminders: 0,
+        calendarInvites: 0,
+        storedRecords: 0
+    });
 
     const [searchQuery, setSearchQuery] = useState('');
+
+    // Fetch communications data from API
+    useEffect(() => {
+        const fetchCommunications = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('http://localhost:5000/api/communications', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    setCommunications(result.data.communications || []);
+                    setStoredCommunications(result.data.storedCommunications || []);
+                    setStats(result.data.stats || {
+                        emailsSent: 0,
+                        scheduledReminders: 0,
+                        calendarInvites: 0,
+                        storedRecords: 0
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching communications:', error);
+            }
+        };
+
+        fetchCommunications();
+    }, []);
 
     const getTypeIcon = (type) => {
         const icons = {
@@ -97,9 +59,10 @@ export function CommunicationCenter() {
         const statusConfig = {
             sent: { label: 'Sent', variant: 'success' },
             scheduled: { label: 'Scheduled', variant: 'default' },
-            pending: { label: 'Pending', variant: 'secondary' }
+            pending: { label: 'Pending', variant: 'secondary' },
+            failed: { label: 'Failed', variant: 'destructive' }
         };
-        const config = statusConfig[status];
+        const config = statusConfig[status] || { label: status || 'Unknown', variant: 'secondary' };
         return (
             <Badge variant={config.variant} className="uppercase tracking-widest text-[9px] font-black">
                 {config.label}
@@ -149,10 +112,10 @@ export function CommunicationCenter() {
             {/* Hero Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {[
-                    { label: 'Emails Sent Today', value: '47', icon: Mail, color: 'from-[#4285f4] to-[#06b6d4]', trend: '+12%' },
-                    { label: 'Scheduled Reminders', value: '23', icon: Bell, color: 'from-[#8b5cf6] to-[#d946ef]', trend: 'Active' },
-                    { label: 'Calendar Invites', value: '38', icon: Calendar, color: 'from-[#10b981] to-[#34d399]', trend: '+8%' },
-                    { label: 'Stored Records', value: '248', icon: Database, color: 'from-[#f59e0b] to-[#fbbf24]', trend: 'Total' }
+                    { label: 'Emails Sent Today', value: stats.emailsSent.toString(), icon: Mail, color: 'from-[#4285f4] to-[#06b6d4]', trend: '+12%' },
+                    { label: 'Scheduled Reminders', value: stats.scheduledReminders.toString(), icon: Bell, color: 'from-[#8b5cf6] to-[#d946ef]', trend: 'Active' },
+                    { label: 'Calendar Invites', value: stats.calendarInvites.toString(), icon: Calendar, color: 'from-[#10b981] to-[#34d399]', trend: '+8%' },
+                    { label: 'Stored Records', value: stats.storedRecords.toString(), icon: Database, color: 'from-[#f59e0b] to-[#fbbf24]', trend: 'Total' }
                 ].map((stat, index) => {
                     const Icon = stat.icon;
                     return (
@@ -215,8 +178,8 @@ export function CommunicationCenter() {
                                         <Card className="p-6 hover:shadow-md transition-all border-slate-100">
                                             <div className="flex items-start gap-4">
                                                 <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${comm.type === 'email' ? 'from-[#4285f4] to-[#06b6d4]' :
-                                                        comm.type === 'reminder' ? 'from-[#8b5cf6] to-[#d946ef]' :
-                                                            'from-[#10b981] to-[#34d399]'
+                                                    comm.type === 'reminder' ? 'from-[#8b5cf6] to-[#d946ef]' :
+                                                        'from-[#10b981] to-[#34d399]'
                                                     } flex items-center justify-center flex-shrink-0 shadow-lg`}>
                                                     <TypeIcon className="w-6 h-6 text-white" />
                                                 </div>

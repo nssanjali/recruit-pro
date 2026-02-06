@@ -37,26 +37,15 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 import { motion, AnimatePresence } from 'motion/react';
 import { JobPosting } from './JobPosting';
 import { getJobs } from '../lib/api';
+import { getUsers, getUsersByRole, getUserStats } from '../lib/userApi';
+import { getApplications, approveApplication, rejectApplication } from '../lib/applicationApi';
 
 export function AdminDashboard() {
-  const [workloadData, setWorkloadData] = useState([
-    { name: 'Sarah K.', value: 12 },
-    { name: 'Mike R.', value: 8 },
-    { name: 'Emma L.', value: 15 },
-    { name: 'John D.', value: 10 },
-  ]);
-
-  const [timeToHireData, setTimeToHireData] = useState([
-    { month: 'Jan', days: 18 },
-    { month: 'Feb', days: 16 },
-    { month: 'Mar', days: 14 },
-    { month: 'Apr', days: 12 },
-    { month: 'May', days: 11 },
-  ]);
-
   const [jobs, setJobs] = useState([]);
+  const [applications, setApplications] = useState([]);
   const [candidates, setCandidates] = useState([]);
   const [recruiters, setRecruiters] = useState([]);
+  const [userStats, setUserStats] = useState({ total: 0, candidates: 0, recruiters: 0, admins: 0 });
   const [showJobPosting, setShowJobPosting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -67,21 +56,19 @@ export function AdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const jobsData = await getJobs();
+      const [jobsData, applicationsData, candidatesData, recruitersData, stats] = await Promise.all([
+        getJobs(),
+        getApplications(),
+        getUsersByRole('candidate'),
+        getUsersByRole('recruiter'),
+        getUserStats()
+      ]);
+
       setJobs(jobsData || []);
-
-      // Mock data for candidates and recruiters
-      setCandidates([
-        { id: 1, name: 'Sarah Johnson', role: 'ML Engineer', status: 'In Review', score: 92, assignedTo: 'Sarah K.' },
-        { id: 2, name: 'Michael Brown', role: 'Full Stack Dev', status: 'Interview', score: 88, assignedTo: 'Mike R.' },
-        { id: 3, name: 'Emma Davis', role: 'DevOps Engineer', status: 'Offer', score: 95, assignedTo: 'Emma L.' },
-      ]);
-
-      setRecruiters([
-        { id: 1, name: 'Sarah K.', department: 'Engineering', activeJobs: 5, candidates: 12, hireRate: '85%' },
-        { id: 2, name: 'Mike R.', department: 'Product', activeJobs: 3, candidates: 8, hireRate: '78%' },
-        { id: 3, name: 'Emma L.', department: 'Engineering', activeJobs: 6, candidates: 15, hireRate: '92%' },
-      ]);
+      setApplications(applicationsData || []);
+      setCandidates(candidatesData || []);
+      setRecruiters(recruitersData || []);
+      setUserStats(stats || { total: 0, candidates: 0, recruiters: 0, admins: 0 });
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -113,15 +100,11 @@ export function AdminDashboard() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
-            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Admin Control Center</h2>
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-950 text-white text-[10px] font-black uppercase tracking-widest shadow-lg">
-              <Zap className="w-2.5 h-2.5 text-yellow-400 fill-yellow-400" />
-              Master v2.0
-            </div>
+            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Admin Dashboard</h2>
           </div>
           <p className="text-slate-500 text-sm flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-[#10b981]" />
-            Full system oversight and management
+            Manage jobs, recruiters, and candidates
           </p>
         </div>
 
@@ -152,10 +135,10 @@ export function AdminDashboard() {
       {/* Hero Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Total Candidates', value: candidates.length.toString(), icon: Users, color: 'from-[#4285f4] to-[#06b6d4]', trend: '+12%' },
-          { label: 'Active Jobs', value: jobs.length.toString(), icon: Briefcase, color: 'from-[#8b5cf6] to-[#d946ef]', trend: `${jobs.length} Open` },
-          { label: 'Recruiters', value: recruiters.length.toString(), icon: UserCheck, color: 'from-[#10b981] to-[#34d399]', trend: 'Active' },
-          { label: 'Avg. Time to Hire', value: '12 days', icon: Clock, color: 'from-[#f59e0b] to-[#fbbf24]', trend: '-15%' },
+          { label: 'Total Candidates', value: userStats.candidates.toString(), icon: Users, color: 'from-[#4285f4] to-[#06b6d4]', trend: `${candidates.length} Total` },
+          { label: 'Active Jobs', value: jobs.length.toString(), icon: Briefcase, color: 'from-[#8b5cf6] to-[#d946ef]', trend: `${jobs.filter(j => j.status === 'open').length} Open` },
+          { label: 'Recruiters', value: userStats.recruiters.toString(), icon: UserCheck, color: 'from-[#10b981] to-[#34d399]', trend: `${recruiters.length} Active` },
+          { label: 'Applications', value: applications.length.toString(), icon: Clock, color: 'from-[#f59e0b] to-[#fbbf24]', trend: 'Total' },
         ].map((stat, index) => {
           const Icon = stat.icon;
           return (
@@ -191,6 +174,7 @@ export function AdminDashboard() {
           <Tabs defaultValue="jobs" className="w-full">
             <TabsList className="bg-slate-100/80 p-1 rounded-xl mb-6">
               <TabsTrigger value="jobs" className="text-[11px] font-bold px-4 h-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">JOBS</TabsTrigger>
+              <TabsTrigger value="applications" className="text-[11px] font-bold px-4 h-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">APPLICATIONS</TabsTrigger>
               <TabsTrigger value="candidates" className="text-[11px] font-bold px-4 h-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">CANDIDATES</TabsTrigger>
               <TabsTrigger value="recruiters" className="text-[11px] font-bold px-4 h-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">RECRUITERS</TabsTrigger>
               <TabsTrigger value="analytics" className="text-[11px] font-bold px-4 h-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">ANALYTICS</TabsTrigger>
@@ -259,6 +243,134 @@ export function AdminDashboard() {
               )}
             </TabsContent>
 
+            {/* Applications Tab */}
+            <TabsContent value="applications" className="space-y-4">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-xl font-black text-slate-900">Application Review</h3>
+                  <p className="text-sm text-slate-500 font-medium mt-0.5">Approve or reject candidate applications</p>
+                </div>
+                <Badge className="bg-amber-100 text-amber-700 border-amber-200 font-bold">
+                  {applications.filter(a => a.status === 'pending').length} Pending
+                </Badge>
+              </div>
+
+              {applications.length > 0 ? (
+                <div className="space-y-3">
+                  {applications.map((app, index) => {
+                    const job = jobs.find(j => j._id === app.jobId);
+                    return (
+                      <motion.div
+                        key={app._id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                      >
+                        <Card className="p-6 hover:shadow-md transition-all border-slate-100">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-start gap-4 flex-1">
+                              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 flex items-center justify-center text-white font-black text-lg shadow-lg">
+                                {app.candidateName?.split(' ').map(n => n[0]).join('') || 'C'}
+                              </div>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <h4 className="font-bold text-slate-900">{app.candidateName || 'Candidate'}</h4>
+                                  <Badge
+                                    className={`uppercase tracking-widest text-[9px] font-black ${app.status === 'approved' ? 'bg-green-100 text-green-700 border-green-200' :
+                                        app.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-200' :
+                                          app.status === 'interview_scheduled' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                            'bg-yellow-100 text-yellow-700 border-yellow-200'
+                                      }`}
+                                  >
+                                    {app.status}
+                                  </Badge>
+                                </div>
+                                <div className="space-y-1 text-sm text-slate-600">
+                                  <p className="flex items-center gap-2">
+                                    <Briefcase className="w-4 h-4" />
+                                    <span className="font-medium">{job?.title || 'Job Position'}</span>
+                                  </p>
+                                  <p className="flex items-center gap-2">
+                                    <Calendar className="w-4 h-4" />
+                                    <span>Applied {new Date(app.createdAt).toLocaleDateString()}</span>
+                                  </p>
+                                  {app.candidateEmail && (
+                                    <p className="text-slate-500">{app.candidateEmail}</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 ml-4">
+                              {app.status === 'pending' && (
+                                <>
+                                  <Button
+                                    onClick={async () => {
+                                      try {
+                                        await approveApplication(app._id);
+                                        fetchData(); // Refresh data
+                                      } catch (error) {
+                                        console.error('Error approving application:', error);
+                                        alert('Failed to approve application');
+                                      }
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2"
+                                    size="sm"
+                                  >
+                                    <UserCheck className="w-4 h-4" />
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    onClick={async () => {
+                                      const reason = prompt('Reason for rejection (optional):');
+                                      try {
+                                        await rejectApplication(app._id, reason || 'Not specified');
+                                        fetchData(); // Refresh data
+                                      } catch (error) {
+                                        console.error('Error rejecting application:', error);
+                                        alert('Failed to reject application');
+                                      }
+                                    }}
+                                    variant="outline"
+                                    className="border-red-200 text-red-600 hover:bg-red-50 font-bold"
+                                    size="sm"
+                                  >
+                                    Reject
+                                  </Button>
+                                </>
+                              )}
+                              {app.status === 'approved' && (
+                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 font-bold">
+                                  ✓ Approved
+                                </Badge>
+                              )}
+                              {app.status === 'interview_scheduled' && (
+                                <Badge className="bg-blue-100 text-blue-700 border-blue-200 font-bold">
+                                  📅 Interview Scheduled
+                                </Badge>
+                              )}
+                              {app.status === 'rejected' && (
+                                <Badge className="bg-red-100 text-red-700 border-red-200 font-bold">
+                                  ✗ Rejected
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </Card>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-2xl">
+                  <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                    <Clock className="w-8 h-8 text-slate-300" />
+                  </div>
+                  <h4 className="text-lg font-bold text-slate-900 mb-2">No Applications</h4>
+                  <p className="text-sm text-slate-500 font-medium">Applications will appear here when candidates apply</p>
+                </div>
+              )}
+            </TabsContent>
+
             {/* Candidates Tab */}
             <TabsContent value="candidates" className="space-y-4">
               <div className="flex items-center justify-between mb-6">
@@ -273,43 +385,48 @@ export function AdminDashboard() {
               </div>
 
               <div className="space-y-3">
-                {candidates.map((candidate, index) => (
-                  <motion.div
-                    key={candidate.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                  >
-                    <Card className="p-6 hover:shadow-md transition-all border-slate-100">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 flex items-center justify-center text-white font-black text-lg shadow-lg">
-                            {candidate.name.split(' ').map(n => n[0]).join('')}
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-slate-900 mb-1">{candidate.name}</h4>
-                            <div className="flex items-center gap-3 text-sm text-slate-500 font-medium">
-                              <span>{candidate.role}</span>
-                              <span>•</span>
-                              <span>AI Score: {candidate.score}%</span>
-                              <span>•</span>
-                              <span>Assigned to: {candidate.assignedTo}</span>
+                {candidates.length > 0 ? (
+                  candidates.map((candidate, index) => (
+                    <motion.div
+                      key={candidate._id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                    >
+                      <Card className="p-6 hover:shadow-md transition-all border-slate-100">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 flex items-center justify-center text-white font-black text-lg shadow-lg">
+                              {candidate.name?.split(' ').map(n => n[0]).join('') || 'U'}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-slate-900 mb-1">{candidate.name}</h4>
+                              <div className="flex items-center gap-3 text-sm text-slate-500 font-medium">
+                                <span>{candidate.email}</span>
+                                {candidate.resume && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-emerald-600">Resume uploaded</span>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
+                          <div className="flex items-center gap-3">
+                            <Badge className="bg-blue-100 text-blue-700 border-blue-200 uppercase tracking-widest text-[9px] font-black">
+                              Candidate
+                            </Badge>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <Badge variant={candidate.status === 'Offer' ? 'success' : 'default'} className="uppercase tracking-widest text-[9px] font-black">
-                            {candidate.status}
-                          </Badge>
-                          <Button variant="outline" size="sm" className="font-bold">
-                            <UserPlus className="w-4 h-4 mr-2" />
-                            Reassign
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  </motion.div>
-                ))}
+                      </Card>
+                    </motion.div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 bg-slate-50 rounded-xl">
+                    <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                    <p className="text-sm text-slate-500">No candidates yet</p>
+                  </div>
+                )}
               </div>
             </TabsContent>
 
@@ -323,43 +440,40 @@ export function AdminDashboard() {
               </div>
 
               <div className="space-y-3">
-                {recruiters.map((recruiter, index) => (
-                  <motion.div
-                    key={recruiter.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                  >
-                    <Card className="p-6 hover:shadow-md transition-all border-slate-100">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#4285f4] to-[#8b5cf6] flex items-center justify-center text-white font-black text-lg shadow-lg">
-                            {recruiter.name.split(' ').map(n => n[0]).join('')}
+                {recruiters.length > 0 ? (
+                  recruiters.map((recruiter, index) => (
+                    <motion.div
+                      key={recruiter._id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                    >
+                      <Card className="p-6 hover:shadow-md transition-all border-slate-100">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#4285f4] to-[#8b5cf6] flex items-center justify-center text-white font-black text-lg shadow-lg">
+                              {recruiter.name?.split(' ').map(n => n[0]).join('') || 'R'}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-slate-900 mb-1">{recruiter.name}</h4>
+                              <p className="text-sm text-slate-500 font-medium">{recruiter.email}</p>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-bold text-slate-900 mb-1">{recruiter.name}</h4>
-                            <p className="text-sm text-slate-500 font-medium">{recruiter.department}</p>
+                          <div className="flex items-center gap-3">
+                            <Badge className="bg-purple-100 text-purple-700 border-purple-200 uppercase tracking-widest text-[9px] font-black">
+                              Recruiter
+                            </Badge>
                           </div>
                         </div>
-                        <div className="flex items-center gap-6">
-                          <div className="text-center">
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Active Jobs</p>
-                            <p className="text-lg font-black text-slate-900">{recruiter.activeJobs}</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Candidates</p>
-                            <p className="text-lg font-black text-slate-900">{recruiter.candidates}</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Hire Rate</p>
-                            <p className="text-lg font-black text-emerald-600">{recruiter.hireRate}</p>
-                          </div>
-                          <Button variant="outline" size="sm" className="font-bold">View Details</Button>
-                        </div>
-                      </div>
-                    </Card>
-                  </motion.div>
-                ))}
+                      </Card>
+                    </motion.div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 bg-slate-50 rounded-xl">
+                    <UserCheck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                    <p className="text-sm text-slate-500">No recruiters yet</p>
+                  </div>
+                )}
               </div>
             </TabsContent>
 
@@ -371,50 +485,66 @@ export function AdminDashboard() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Recruiter Workload */}
+                {/* Application Status Distribution */}
                 <Card className="p-6 border-slate-100">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="font-bold text-slate-900">Recruiter Workload</h4>
-                    <Badge variant="outline" className="border-[#8b5cf6] text-[#8b5cf6] text-[9px] font-black uppercase">
-                      <Sparkles className="w-3 h-3 mr-1" />
-                      AI-Balanced
-                    </Badge>
+                  <h4 className="font-bold text-slate-900 mb-4">Application Status</h4>
+                  <div className="space-y-3">
+                    {['pending', 'reviewing', 'shortlisted', 'rejected', 'accepted'].map(status => {
+                      const count = applications.filter(app => app.status === status).length;
+                      const percentage = applications.length > 0 ? (count / applications.length * 100).toFixed(0) : 0;
+                      return (
+                        <div key={status} className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="font-medium text-slate-700 capitalize">{status}</span>
+                            <span className="font-bold text-slate-900">{count} ({percentage}%)</span>
+                          </div>
+                          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full ${status === 'accepted' ? 'bg-emerald-500' :
+                                status === 'rejected' ? 'bg-red-500' :
+                                  status === 'shortlisted' ? 'bg-blue-500' :
+                                    status === 'reviewing' ? 'bg-yellow-500' :
+                                      'bg-slate-400'
+                                }`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={workloadData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip />
-                      <Bar dataKey="value" fill="url(#colorGradient)" radius={[8, 8, 0, 0]} />
-                      <defs>
-                        <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#4285f4" />
-                          <stop offset="100%" stopColor="#8b5cf6" />
-                        </linearGradient>
-                      </defs>
-                    </BarChart>
-                  </ResponsiveContainer>
                 </Card>
 
-                {/* Time to Hire Trend */}
+                {/* Jobs by Status */}
                 <Card className="p-6 border-slate-100">
-                  <h4 className="font-bold text-slate-900 mb-4">Average Time to Hire</h4>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <LineChart data={timeToHireData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip />
-                      <Line
-                        type="monotone"
-                        dataKey="days"
-                        stroke="#4285f4"
-                        strokeWidth={3}
-                        dot={{ fill: '#8b5cf6', r: 6 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <h4 className="font-bold text-slate-900 mb-4">Jobs Overview</h4>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                      <div>
+                        <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Open Jobs</p>
+                        <p className="text-2xl font-black text-emerald-900 mt-1">
+                          {jobs.filter(j => j.status === 'open').length}
+                        </p>
+                      </div>
+                      <Briefcase className="w-8 h-8 text-emerald-600" />
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <div>
+                        <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Closed Jobs</p>
+                        <p className="text-2xl font-black text-slate-900 mt-1">
+                          {jobs.filter(j => j.status === 'closed').length}
+                        </p>
+                      </div>
+                      <Briefcase className="w-8 h-8 text-slate-400" />
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-200">
+                      <div>
+                        <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Total Applications</p>
+                        <p className="text-2xl font-black text-blue-900 mt-1">{applications.length}</p>
+                      </div>
+                      <Users className="w-8 h-8 text-blue-600" />
+                    </div>
+                  </div>
                 </Card>
               </div>
             </TabsContent>

@@ -40,14 +40,15 @@ export function Layout({ children, user, onLogout }) {
     }, []);
 
     const menuItems = [
-        { id: 'candidate', icon: LayoutDashboard, label: 'Candidate Portal', path: '/candidate', roles: ['candidate'] },
-        { id: 'recruiter', icon: Users, label: 'Recruiter Nexus', path: '/recruiter', roles: ['recruiter'] },
-        { id: 'scheduling', icon: Calendar, label: 'Schedule Engine', path: '/scheduling', roles: ['recruiter', 'admin'] },
-        { id: 'assignment', icon: UserCheck, label: 'Assignment Core', path: '/assignment', roles: ['recruiter', 'admin'] },
-        { id: 'communication', icon: Mail, label: 'Signal Center', path: '/communication', roles: ['candidate', 'recruiter', 'admin'] },
-        { id: 'extension', icon: Sparkles, label: 'Evaluation Hub', path: '/extension', roles: ['candidate', 'recruiter', 'admin'] },
-        { id: 'profile', icon: User, label: 'Neural Profile', path: '/profile', roles: ['candidate', 'recruiter', 'admin'] },
-        { id: 'admin', icon: BarChart3, label: 'Global Control', path: '/admin', roles: ['admin'] },
+        { id: 'candidate', icon: LayoutDashboard, label: 'Dashboard', path: '/candidate', roles: ['candidate'] },
+        { id: 'recruiter', icon: Users, label: 'Recruiter Dashboard', path: '/recruiter', roles: ['recruiter'] },
+        { id: 'scheduling', icon: Calendar, label: 'Scheduling', path: '/scheduling', roles: ['recruiter', 'admin'] },
+        { id: 'assignment', icon: UserCheck, label: 'Assignments', path: '/assignment', roles: ['recruiter', 'admin'] },
+        { id: 'communication', icon: Mail, label: 'Messages', path: '/communication', roles: ['candidate', 'recruiter', 'admin', 'company_admin'] },
+        { id: 'extension', icon: Sparkles, label: 'Evaluations', path: '/extension', roles: ['candidate', 'recruiter', 'admin', 'company_admin'] },
+        { id: 'profile', icon: User, label: 'Profile', path: '/profile', roles: ['candidate', 'recruiter', 'admin', 'company_admin'] },
+        { id: 'admin', icon: BarChart3, label: 'Admin Dashboard', path: '/admin', roles: ['admin'] },
+        { id: 'company-admin', icon: ShieldCheck, label: 'Company Dashboard', path: '/company-admin', roles: ['company_admin'] },
     ];
 
     const filteredMenuItems = menuItems.filter(item =>
@@ -71,7 +72,7 @@ export function Layout({ children, user, onLogout }) {
                             <h2 className="text-lg font-black text-slate-900 tracking-tighter leading-none">RecruitPro</h2>
                             <div className="flex items-center gap-1.5 mt-1">
                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nexus Established</span>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Online</span>
                             </div>
                         </div>
                     </div>
@@ -80,7 +81,7 @@ export function Layout({ children, user, onLogout }) {
                 {/* Navigation Section */}
                 <nav className="flex-1 px-4 py-8 space-y-2 overflow-y-auto">
                     <div className="px-4 mb-4">
-                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.25em]">Main Command</p>
+                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.25em]">Navigation</p>
                     </div>
                     {filteredMenuItems.map((item) => {
                         const Icon = item.icon;
@@ -109,19 +110,12 @@ export function Layout({ children, user, onLogout }) {
 
                 {/* Footer Sidebar Section */}
                 <div className="p-6 border-t border-slate-100 bg-slate-50/50">
-                    <div className="flex items-center justify-between px-2 mb-4">
-                        <div className="flex items-center gap-2">
-                            <Cpu className="w-3.5 h-3.5 text-slate-400" />
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">Engine v2.4</span>
-                        </div>
-                        <Badge className="bg-white border-slate-200 text-[9px] h-4 py-0 text-slate-400">PRO</Badge>
-                    </div>
                     <button
                         onClick={() => navigate('/profile')}
                         className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm border border-transparent hover:border-slate-100 transition-all group"
                     >
                         <Settings className="w-5 h-5 group-hover:rotate-90 transition-transform duration-700" />
-                        <span className="text-sm font-bold tracking-tight">System Config</span>
+                        <span className="text-sm font-bold tracking-tight">Settings</span>
                     </button>
                 </div>
             </div>
@@ -143,7 +137,7 @@ export function Layout({ children, user, onLogout }) {
                         </AnimatePresence>
                         <div className="flex items-center gap-2 mt-1">
                             <div className="w-2 h-2 rounded-full bg-[#4285f4] shadow-[0_0_8px_#4285f4]" />
-                            <p className="text-[11px] font-bold text-slate-400 tracking-wider uppercase">Neural-Link Active</p>
+                            <p className="text-[11px] font-bold text-slate-400 tracking-wider uppercase">Connected</p>
                         </div>
                     </div>
 

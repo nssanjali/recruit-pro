@@ -128,7 +128,7 @@ export function InterviewScheduling() {
                 <h3 className="text-foreground">Automated Interview Scheduling</h3>
                 <Badge className="bg-gradient-to-r from-[#4285f4] to-[#8b5cf6]">
                   <Sparkles className="w-3 h-3 mr-1" />
-                  AI-Powered + Secure Proctoring
+                  Automated Scheduling
                 </Badge>
               </div>
               <p className="text-muted-foreground">
@@ -318,7 +318,7 @@ export function InterviewScheduling() {
                         <div className="flex gap-2">
                           <Badge variant="outline" className="border-[#8b5cf6] text-[#8b5cf6]">
                             <Sparkles className="w-3 h-3 mr-1" />
-                            AI-Scheduled
+                            Auto-Scheduled
                           </Badge>
                           {interview.isProctored && (
                             <Badge variant="outline" className="border-[#06b6d4] text-[#06b6d4]">

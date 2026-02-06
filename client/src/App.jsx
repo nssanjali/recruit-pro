@@ -5,6 +5,7 @@ import { CandidateDashboard } from "./components/CandidateDashboard";
 import { RecruiterDashboard } from "./components/RecruiterDashboard";
 import { ProfileSettings } from "./components/ProfileSettings";
 import { AdminDashboard } from "./components/AdminDashboard";
+import { CompanyAdminDashboard } from "./components/CompanyAdminDashboard";
 import { BrowserExtension } from "./components/BrowserExtension";
 import { InterviewScheduling } from "./components/InterviewScheduling";
 import { RecruiterAssignment } from "./components/RecruiterAssignment";
@@ -69,10 +70,10 @@ export default function App() {
         <Route path="/auth/success" element={<AuthSuccess />} />
 
         {/* Protected Routes */}
-        <Route element={<ProtectedRoute allowedRoles={['candidate', 'recruiter', 'admin']} user={user} />}>
+        <Route element={<ProtectedRoute allowedRoles={['candidate', 'recruiter', 'admin', 'company_admin']} user={user} />}>
           <Route path="/" element={
             <Layout user={user} onLogout={handleLogout} activePage={getActivePage()}>
-              <Navigate to={user ? `/${user.role}` : '/login'} replace />
+              <Navigate to={user ? `/${user.role === 'company_admin' ? 'company-admin' : user.role}` : '/login'} replace />
             </Layout>
           } />
 
@@ -109,6 +110,15 @@ export default function App() {
             <Route path="/admin" element={
               <Layout user={user} onLogout={handleLogout} activePage="admin">
                 <AdminDashboard user={user} />
+              </Layout>
+            } />
+          </Route>
+
+          {/* Company Admin Routes */}
+          <Route element={<ProtectedRoute allowedRoles={['company_admin']} user={user} />}>
+            <Route path="/company-admin" element={
+              <Layout user={user} onLogout={handleLogout} activePage="company-admin">
+                <CompanyAdminDashboard user={user} />
               </Layout>
             } />
           </Route>

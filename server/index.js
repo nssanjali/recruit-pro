@@ -14,6 +14,12 @@ import assignmentRoutes from './routes/assignmentRoutes.js';
 import queueRoutes from './routes/queueRoutes.js';
 import jobRoutes from './routes/jobRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
+import applicationRoutes from './routes/applicationRoutes.js';
+import templateRoutes from './routes/templateRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import communicationRoutes from './routes/communicationRoutes.js';
+
+import { initializeCronJobs } from './services/cronService.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -63,6 +69,10 @@ app.use('/api/assignments', assignmentRoutes);
 app.use('/api/queue', queueRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/applications', applicationRoutes);
+app.use('/api/templates', templateRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/communications', communicationRoutes);
 
 // Health / root endpoint
 app.get('/', (req, res) => {
@@ -104,6 +114,9 @@ const startServer = async () => {
     // Connect to MongoDB (non-blocking if it fails)
     await connectDB();
 
+    // Initialize cron jobs for automated reminders
+    initializeCronJobs();
+
     app.listen(PORT, () => {
         console.log('---------------------------------------');
         console.log(`🚀 Server running on port ${PORT}`);
@@ -111,7 +124,8 @@ const startServer = async () => {
         console.log(
             `🗄️ MongoDB URI loaded: ${process.env.MONGODB_URI ? 'YES' : 'NO'}`
         );
-
+        console.log('📧 Email automation: ENABLED');
+        console.log('⏰ Cron jobs: ACTIVE');
         console.log('---------------------------------------');
     });
 };

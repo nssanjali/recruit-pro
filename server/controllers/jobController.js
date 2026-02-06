@@ -7,9 +7,11 @@ export const getJobs = async (req, res) => {
     try {
         let query = {};
 
-        // If user is a recruiter, only show their jobs
-        // If user is admin, show all jobs
-        if (req.user.role === 'recruiter') {
+        // Role-based filtering:
+        // - company_admin: sees only jobs they posted
+        // - admin: sees all jobs
+        // - recruiter/candidate: sees all jobs
+        if (req.user.role === 'company_admin') {
             query.postedBy = req.user._id;
         }
 
@@ -53,7 +55,7 @@ export const getJob = async (req, res) => {
 
 // @desc    Create new job
 // @route   POST /api/jobs
-// @access  Private (Recruiter, Admin)
+// @access  Private (Admin only)
 export const createJob = async (req, res) => {
     try {
         // Add user to req.body
@@ -75,7 +77,7 @@ export const createJob = async (req, res) => {
 
 // @desc    Update job
 // @route   PUT /api/jobs/:id
-// @access  Private (Recruiter, Admin)
+// @access  Private (Admin only)
 export const updateJob = async (req, res) => {
     try {
         let job = await Job.findById(req.params.id);
@@ -87,9 +89,9 @@ export const updateJob = async (req, res) => {
             });
         }
 
-        // Make sure user is job owner
-        if (job.postedBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-            return res.status(401).json({
+        // Ownership check for company_admin
+        if (req.user.role === 'company_admin' && job.postedBy.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
                 success: false,
                 message: 'Not authorized to update this job'
             });
@@ -111,7 +113,7 @@ export const updateJob = async (req, res) => {
 
 // @desc    Delete job
 // @route   DELETE /api/jobs/:id
-// @access  Private (Recruiter, Admin)
+// @access  Private (Admin only)
 export const deleteJob = async (req, res) => {
     try {
         const job = await Job.findById(req.params.id);
@@ -123,9 +125,9 @@ export const deleteJob = async (req, res) => {
             });
         }
 
-        // Make sure user is job owner
-        if (job.postedBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-            return res.status(401).json({
+        // Ownership check for company_admin
+        if (req.user.role === 'company_admin' && job.postedBy.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
                 success: false,
                 message: 'Not authorized to delete this job'
             });

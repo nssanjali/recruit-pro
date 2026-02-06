@@ -2,25 +2,54 @@ import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from './ui';
 import { Briefcase, MapPin, Building, Clock, TrendingUp, Star, DollarSign } from 'lucide-react';
 import { getJobs } from '../lib/api';
+import { getApplications } from '../lib/applicationApi';
+import { JobApplicationModal } from './JobApplicationModal';
 
 export function CandidateDashboard({ user }) {
     const [jobs, setJobs] = useState([]);
+    const [applications, setApplications] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [selectedJob, setSelectedJob] = useState(null);
+    const [showApplicationModal, setShowApplicationModal] = useState(false);
 
     useEffect(() => {
-        const fetchJobs = async () => {
+        const fetchData = async () => {
             try {
-                const fetchedJobs = await getJobs();
+                const [fetchedJobs, fetchedApplications] = await Promise.all([
+                    getJobs(),
+                    getApplications()
+                ]);
                 setJobs(fetchedJobs || []);
+                setApplications(fetchedApplications || []);
             } catch (error) {
-                console.error('Error fetching jobs:', error);
+                console.error('Error fetching data:', error);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchJobs();
+        fetchData();
     }, []);
+
+    const handleApplyClick = (job) => {
+        setSelectedJob(job);
+        setShowApplicationModal(true);
+    };
+
+    const handleApplicationSuccess = async () => {
+        // Refresh applications
+        try {
+            const fetchedApplications = await getApplications();
+            setApplications(fetchedApplications || []);
+        } catch (error) {
+            console.error('Error refreshing applications:', error);
+        }
+    };
+
+    // Check if user has already applied to a job
+    const hasApplied = (jobId) => {
+        return applications.some(app => app.jobId === jobId || app.job?._id === jobId);
+    };
 
     return (
         <div className="space-y-8">
@@ -38,7 +67,7 @@ export function CandidateDashboard({ user }) {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Applications</p>
-                                <p className="text-3xl font-black text-slate-900 mt-2">0</p>
+                                <p className="text-3xl font-black text-slate-900 mt-2">{applications.length}</p>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
                                 <Briefcase className="w-6 h-6 text-blue-600" />
@@ -140,8 +169,15 @@ export function CandidateDashboard({ user }) {
                                             <Clock className="w-3.5 h-3.5" />
                                             Posted {new Date(job.createdAt).toLocaleDateString()}
                                         </div>
-                                        <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-                                            Apply Now
+                                        <Button
+                                            onClick={() => handleApplyClick(job)}
+                                            disabled={hasApplied(job._id)}
+                                            className={hasApplied(job._id)
+                                                ? "bg-emerald-600 hover:bg-emerald-600 text-white cursor-not-allowed"
+                                                : "bg-blue-600 hover:bg-blue-700 text-white"
+                                            }
+                                        >
+                                            {hasApplied(job._id) ? '✓ Applied' : 'Apply Now'}
                                         </Button>
                                     </div>
                                 </div>
@@ -150,6 +186,14 @@ export function CandidateDashboard({ user }) {
                     )}
                 </CardContent>
             </Card>
+
+            <JobApplicationModal
+                job={selectedJob}
+                isOpen={showApplicationModal}
+                onClose={() => setShowApplicationModal(false)}
+                onSuccess={handleApplicationSuccess}
+                user={user}
+            />
         </div>
     );
 }

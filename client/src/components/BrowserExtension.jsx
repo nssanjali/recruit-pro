@@ -36,15 +36,11 @@ export function BrowserExtension() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
-            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Evaluation Hub</h2>
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-950 text-white text-[10px] font-black uppercase tracking-widest shadow-lg">
-              <Zap className="w-2.5 h-2.5 text-yellow-400 fill-yellow-400" />
-              AI Core v2.0
-            </div>
+            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Interview Evaluations</h2>
           </div>
           <p className="text-slate-500 text-sm flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-[#10b981]" />
-            Real-time interview analysis powered by Google Gemini
+            Real-time interview analysis and feedback
           </p>
         </div>
 
@@ -70,7 +66,7 @@ export function BrowserExtension() {
                   <Sparkles className="w-5 h-5 text-purple-600" />
                 </div>
                 <div>
-                  <CardTitle className="text-xl font-black text-slate-900">AI Interview Assistant</CardTitle>
+                  <CardTitle className="text-xl font-black text-slate-900">Interview Assistant</CardTitle>
                   <p className="text-sm text-slate-500 font-medium mt-0.5">Record and analyze interviews in real-time</p>
                 </div>
               </div>
@@ -80,8 +76,8 @@ export function BrowserExtension() {
                 <Button
                   onClick={handleToggleRecording}
                   className={`flex-1 h-14 font-bold text-base rounded-2xl shadow-xl transition-all ${isRecording
-                      ? 'bg-red-500 hover:bg-red-600 text-white'
-                      : 'bg-gradient-to-r from-[#4285f4] to-[#8b5cf6] hover:from-[#3b79db] hover:to-[#7c4fe0] text-white'
+                    ? 'bg-red-500 hover:bg-red-600 text-white'
+                    : 'bg-gradient-to-r from-[#4285f4] to-[#8b5cf6] hover:from-[#3b79db] hover:to-[#7c4fe0] text-white'
                     }`}
                 >
                   {isRecording ? (
@@ -165,7 +161,7 @@ export function BrowserExtension() {
                   <CardContent className="p-8 relative">
                     <div className="flex items-center gap-3 mb-6">
                       <Sparkles className="w-6 h-6" />
-                      <h3 className="text-lg font-black uppercase tracking-wider">AI Analysis</h3>
+                      <h3 className="text-lg font-black uppercase tracking-wider">Analysis</h3>
                     </div>
                     <div className="text-center mb-4">
                       <div className="text-6xl font-black mb-2">{feedback.overall}%</div>
@@ -258,7 +254,7 @@ export function BrowserExtension() {
                     </div>
                     <h3 className="text-lg font-bold text-slate-900 mb-2">No Analysis Yet</h3>
                     <p className="text-sm text-slate-500 font-medium max-w-xs mx-auto">
-                      Start recording and click "Analyze" to get AI-powered feedback on the interview
+                      Start recording and click "Analyze" to get feedback on the interview
                     </p>
                   </CardContent>
                 </Card>
