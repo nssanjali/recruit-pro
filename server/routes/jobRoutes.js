@@ -4,7 +4,10 @@ import {
     getJob,
     createJob,
     updateJob,
-    deleteJob
+    deleteJob,
+    getJobCandidates,
+    applyJob,
+    checkJobMatch
 } from '../controllers/jobController.js';
 import { protect, authorize } from '../middleware/auth.js';
 
@@ -18,5 +21,14 @@ router.route('/:id')
     .get(getJob)
     .put(protect, authorize('admin', 'company_admin'), updateJob)
     .delete(protect, authorize('admin', 'company_admin'), deleteJob);
+
+router.route('/:id/candidates')
+    .get(protect, authorize('recruiter', 'admin'), getJobCandidates);
+
+router.route('/:id/apply')
+    .post(protect, authorize('candidate'), applyJob);
+
+router.route('/:id/check-match')
+    .get(protect, authorize('candidate'), checkJobMatch);
 
 export default router;

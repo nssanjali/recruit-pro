@@ -9,9 +9,12 @@ import { CompanyAdminDashboard } from "./components/CompanyAdminDashboard";
 import { BrowserExtension } from "./components/BrowserExtension";
 import { InterviewScheduling } from "./components/InterviewScheduling";
 import { RecruiterAssignment } from "./components/RecruiterAssignment";
+import { JobCandidates } from "./components/JobCandidates";
 import { CommunicationCenter } from "./components/CommunicationCenter";
 import { AuthPage } from "./components/AuthPage";
 import { AuthSuccess } from "./components/AuthSuccess";
+import { JobDetails } from "./components/JobDetails";
+import { MatchAnalysis } from "./components/MatchAnalysis";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { Toaster } from "./components/ui";
 import { getCurrentUser } from "./lib/api";
@@ -103,6 +106,11 @@ export default function App() {
                 <RecruiterAssignment />
               </Layout>
             } />
+            <Route path="/jobs/:id/candidates" element={
+              <Layout user={user} onLogout={handleLogout} activePage="recruiter">
+                <JobCandidates />
+              </Layout>
+            } />
           </Route>
 
           {/* Admin Routes */}
@@ -138,6 +146,14 @@ export default function App() {
             <Layout user={user} onLogout={handleLogout} activePage="profile">
               <ProfileSettings user={user} onUpdate={(updatedUser) => setUser(updatedUser)} />
             </Layout>
+          } />
+          <Route path="/jobs/:id" element={
+            <Layout user={user} onLogout={handleLogout} activePage="candidate">
+              <JobDetails user={user} />
+            </Layout>
+          } />
+          <Route path="/jobs/:id/analysis" element={
+            <MatchAnalysis user={user} />
           } />
 
         </Route>

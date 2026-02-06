@@ -270,8 +270,8 @@ export const Label = React.forwardRef(({ className, ...props }, ref) => (
 ));
 Label.displayName = 'Label';
 
-// Select Component (basic)
-export const Select = React.forwardRef(({ className, ...props }, ref) => (
+// Select Component (basic - native HTML)
+export const NativeSelect = React.forwardRef(({ className, ...props }, ref) => (
     <select
         ref={ref}
         className={cn(
@@ -281,10 +281,10 @@ export const Select = React.forwardRef(({ className, ...props }, ref) => (
         {...props}
     />
 ));
-Select.displayName = 'Select';
+NativeSelect.displayName = 'NativeSelect';
 
 // Radix Select Components (for more advanced dropdowns)
-export const SelectRoot = SelectPrimitive.Root;
+export const Select = SelectPrimitive.Root;
 
 export const SelectTrigger = React.forwardRef(({ className, children, ...props }, ref) => (
     <SelectPrimitive.Trigger
