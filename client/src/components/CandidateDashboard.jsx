@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from './ui';
 import { Briefcase, MapPin, Building, Clock, TrendingUp, Star, DollarSign } from 'lucide-react';
-import { getJobs } from '../lib/api';
+import { getJobs, applyJob } from '../lib/api';
+import { toast } from 'sonner';
+
+import { useNavigate } from 'react-router-dom';
 
 export function CandidateDashboard({ user }) {
+    const navigate = useNavigate();
     const [jobs, setJobs] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -21,6 +25,16 @@ export function CandidateDashboard({ user }) {
 
         fetchJobs();
     }, []);
+
+    const handleApply = async (jobId) => {
+        try {
+            await applyJob(jobId);
+            toast.success('Application submitted successfully!');
+            // Optional: Update local state to show 'Applied' status
+        } catch (error) {
+            toast.error(error.message || 'Failed to apply');
+        }
+    };
 
     return (
         <div className="space-y-8">
@@ -140,9 +154,21 @@ export function CandidateDashboard({ user }) {
                                             <Clock className="w-3.5 h-3.5" />
                                             Posted {new Date(job.createdAt).toLocaleDateString()}
                                         </div>
-                                        <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-                                            Apply Now
-                                        </Button>
+                                        <div className="flex items-center gap-3">
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => navigate(`/jobs/${job._id}`)}
+                                                className="border-slate-200 hover:bg-slate-50 text-slate-600"
+                                            >
+                                                View Details
+                                            </Button>
+                                            <Button
+                                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                                                onClick={() => navigate(`/jobs/${job._id}`)}
+                                            >
+                                                Apply Now
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
