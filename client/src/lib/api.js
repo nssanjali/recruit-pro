@@ -243,6 +243,24 @@ export const applyJob = async (jobId) => {
     }
 };
 
+export const getApplications = async () => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/applications`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) throw new Error('Failed to fetch applications');
+        const result = await response.json();
+        return result.data;
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
 export const checkJobMatch = async (jobId) => {
     try {
         const token = localStorage.getItem('token');

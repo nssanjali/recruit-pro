@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from './ui';
 import { Briefcase, MapPin, Building, Clock, TrendingUp, Star, DollarSign } from 'lucide-react';
-import { getJobs, applyJob } from '../lib/api';
+import { getJobs, applyJob, getApplications } from '../lib/api';
 import { toast } from 'sonner';
+import { JobApplicationModal } from './JobApplicationModal';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -25,6 +26,7 @@ export function CandidateDashboard({ user }) {
                 setApplications(fetchedApplications || []);
             } catch (error) {
                 console.error('Error fetching data:', error);
+                toast.error(error.message || "Failed to load jobs");
             } finally {
                 setLoading(false);
             }
@@ -181,16 +183,7 @@ export function CandidateDashboard({ user }) {
                                             <Clock className="w-3.5 h-3.5" />
                                             Posted {new Date(job.createdAt).toLocaleDateString()}
                                         </div>
-                                        <Button
-                                            onClick={() => handleApplyClick(job)}
-                                            disabled={hasApplied(job._id)}
-                                            className={hasApplied(job._id)
-                                                ? "bg-emerald-600 hover:bg-emerald-600 text-white cursor-not-allowed"
-                                                : "bg-blue-600 hover:bg-blue-700 text-white"
-                                            }
-                                        >
-                                            {hasApplied(job._id) ? '✓ Applied' : 'Apply Now'}
-                                        </Button>
+
                                         <div className="flex items-center gap-3">
                                             <Button
                                                 variant="outline"
@@ -200,10 +193,14 @@ export function CandidateDashboard({ user }) {
                                                 View Details
                                             </Button>
                                             <Button
-                                                className="bg-blue-600 hover:bg-blue-700 text-white"
-                                                onClick={() => navigate(`/jobs/${job._id}`)}
+                                                onClick={() => handleApplyClick(job)}
+                                                disabled={hasApplied(job._id)}
+                                                className={hasApplied(job._id)
+                                                    ? "bg-emerald-600 hover:bg-emerald-600 text-white cursor-not-allowed"
+                                                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                                                }
                                             >
-                                                Apply Now
+                                                {hasApplied(job._id) ? '✓ Applied' : 'Apply Now'}
                                             </Button>
                                         </div>
                                     </div>
