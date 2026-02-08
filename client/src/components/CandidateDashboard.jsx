@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from './ui';
 import { Briefcase, MapPin, Building, Clock, TrendingUp, Star, DollarSign } from 'lucide-react';
-import { getJobs, applyJob } from '../lib/api';
+import { getJobs, applyJob, getApplications } from '../lib/api';
 import { toast } from 'sonner';
-
+import { JobApplicationModal } from './JobApplicationModal';
 import { useNavigate } from 'react-router-dom';
 
 export function CandidateDashboard({ user }) {
