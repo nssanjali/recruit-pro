@@ -13,6 +13,7 @@ import { JobCandidates } from "./components/JobCandidates";
 import { CommunicationCenter } from "./components/CommunicationCenter";
 import { AuthPage } from "./components/AuthPage";
 import { AuthSuccess } from "./components/AuthSuccess";
+import { CompanySignup } from "./components/CompanySignup";
 import { JobDetails } from "./components/JobDetails";
 import { MatchAnalysis } from "./components/MatchAnalysis";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -70,6 +71,7 @@ export default function App() {
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={!user ? <AuthPage /> : <Navigate to={`/${user.role}`} replace />} />
+        <Route path="/company-signup" element={!user ? <CompanySignup onSwitchToLogin={() => window.location.href = '/login'} /> : <Navigate to="/company-admin" replace />} />
         <Route path="/auth/success" element={<AuthSuccess />} />
 
         {/* Protected Routes */}
@@ -106,11 +108,6 @@ export default function App() {
                 <RecruiterAssignment />
               </Layout>
             } />
-            <Route path="/jobs/:id/candidates" element={
-              <Layout user={user} onLogout={handleLogout} activePage="recruiter">
-                <JobCandidates />
-              </Layout>
-            } />
           </Route>
 
           {/* Admin Routes */}
@@ -127,6 +124,15 @@ export default function App() {
             <Route path="/company-admin" element={
               <Layout user={user} onLogout={handleLogout} activePage="company-admin">
                 <CompanyAdminDashboard user={user} />
+              </Layout>
+            } />
+          </Route>
+
+          {/* Shared Recruiter & Company Admin Routes */}
+          <Route element={<ProtectedRoute allowedRoles={['recruiter', 'company_admin', 'admin']} user={user} />}>
+            <Route path="/jobs/:id/candidates" element={
+              <Layout user={user} onLogout={handleLogout} activePage="recruiter">
+                <JobCandidates />
               </Layout>
             } />
           </Route>

@@ -224,8 +224,10 @@ export const getJobCandidates = async (req, res) => {
         }
 
         // Check authorization
-        if (job.postedBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-            return res.status(401).json({
+        // Admins and recruiters can view all job candidates
+        // Company admins can only view candidates for jobs they posted
+        if (req.user.role === 'company_admin' && job.postedBy.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
                 success: false,
                 message: 'Not authorized to view candidates for this job'
             });
@@ -244,6 +246,11 @@ export const getJobCandidates = async (req, res) => {
 
         const candidates = await User.find({ _id: { $in: candidateIds } });
 
+        // Determine if match analysis should be included
+        // Only admins and company_admins (who posted the job) get match scores
+        const includeMatchAnalysis = req.user.role === 'admin' ||
+            (req.user.role === 'company_admin' && job.postedBy.toString() === req.user._id.toString());
+
         const candidatesWithScores = await Promise.all(candidates.map(async (candidate) => {
             let matchScore = 0;
             let analysis = null;
@@ -255,41 +262,45 @@ export const getJobCandidates = async (req, res) => {
             // Sign the URL for access
             const resumeUrl = signResumeUrl(rawResumeUrl);
 
-            // parsing logic...
-            // parsing logic...
-            // PRIORITIZE DB TEXT (Avoids Cloudinary 401/404 issues on PDF fetch)
-            let resumeText = candidate.resumeText || application?.resumeText;
+            // Only calculate match scores for authorized roles
+            if (includeMatchAnalysis) {
+                // PRIORITIZE DB TEXT (Avoids Cloudinary 401/404 issues on PDF fetch)
+                let resumeText = candidate.resumeText || application?.resumeText;
 
-            if (!resumeText && rawResumeUrl && resumeUrl) {
-                // For parsing, we MUST use the RAW url (or specific PDF signed url)
-                // The `resumeUrl` is signed for JPG viewing (browser).
-                // `parseResume` now handles signing for PDF access internally.
-                resumeText = await parseResume(rawResumeUrl);
-            }
+                if (!resumeText && rawResumeUrl && resumeUrl) {
+                    // For parsing, we MUST use the RAW url (or specific PDF signed url)
+                    // The `resumeUrl` is signed for JPG viewing (browser).
+                    // `parseResume` now handles signing for PDF access internally.
+                    resumeText = await parseResume(rawResumeUrl);
+                }
 
-            if (resumeText) {
-                // Result is an object { score, skillsScore, ... }
-                const matchResult = calculateMatchScore(job.description + ' ' + (job.requirements || ''), resumeText);
-                matchScore = matchResult.score; // Extract the numeric score
-                analysis = matchResult;
+                if (resumeText) {
+                    // Result is an object { score, skillsScore, ... }
+                    const matchResult = calculateMatchScore(job.description + ' ' + (job.requirements || ''), resumeText);
+                    matchScore = matchResult.score; // Extract the numeric score
+                    analysis = matchResult;
+                }
             }
 
             const { password, ...candidateData } = candidate._doc || candidate; // Handle Mongoose document
             return {
                 ...candidateData,
                 resume: resumeUrl, // Explicitly include the resume URL found
-                matchScore, // This is now a number
-                analysis,    // Full analysis object if needed by frontend
+                matchScore: includeMatchAnalysis ? matchScore : undefined, // Only include if authorized
+                analysis: includeMatchAnalysis ? analysis : undefined,    // Only include if authorized
                 applicationStatus: application?.status // Include application status
             };
         }));
 
-        // Sort by match score (descending)
-        candidatesWithScores.sort((a, b) => b.matchScore - a.matchScore);
+        // Sort by match score (descending) only if match analysis is included
+        if (includeMatchAnalysis) {
+            candidatesWithScores.sort((a, b) => b.matchScore - a.matchScore);
+        }
 
         res.status(200).json({
             success: true,
-            data: candidatesWithScores
+            data: candidatesWithScores,
+            includeMatchAnalysis // Let frontend know if match analysis is included
         });
 
     } catch (error) {

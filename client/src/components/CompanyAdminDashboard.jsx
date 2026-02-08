@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Briefcase,
     Clock,
@@ -28,6 +29,7 @@ import { getJobs } from '../lib/api';
 import { getApplications } from '../lib/applicationApi';
 
 export function CompanyAdminDashboard({ user }) {
+    const navigate = useNavigate();
     const [jobs, setJobs] = useState([]);
     const [applications, setApplications] = useState([]);
     const [showJobPosting, setShowJobPosting] = useState(false);
@@ -201,7 +203,14 @@ export function CompanyAdminDashboard({ user }) {
                                                         >
                                                             {job.status}
                                                         </Badge>
-                                                        <Button variant="outline" size="sm" className="font-bold">Manage</Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="font-bold"
+                                                            onClick={() => navigate(`/jobs/${job._id}/candidates`)}
+                                                        >
+                                                            View Candidates
+                                                        </Button>
                                                     </div>
                                                 </div>
                                             </Card>
@@ -253,9 +262,9 @@ export function CompanyAdminDashboard({ user }) {
                                                     <div className="flex items-center gap-3">
                                                         <Badge
                                                             className={`uppercase tracking-widest text-[9px] font-black ${app.status === 'accepted' ? 'bg-green-100 text-green-700 border-green-200' :
-                                                                    app.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-200' :
-                                                                        app.status === 'shortlisted' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                                                                            'bg-yellow-100 text-yellow-700 border-yellow-200'
+                                                                app.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-200' :
+                                                                    app.status === 'shortlisted' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                                        'bg-yellow-100 text-yellow-700 border-yellow-200'
                                                                 }`}
                                                         >
                                                             {app.status}
@@ -298,10 +307,10 @@ export function CompanyAdminDashboard({ user }) {
                                                     <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                                                         <div
                                                             className={`h-full ${status === 'accepted' ? 'bg-emerald-500' :
-                                                                    status === 'rejected' ? 'bg-red-500' :
-                                                                        status === 'shortlisted' ? 'bg-blue-500' :
-                                                                            status === 'reviewing' ? 'bg-yellow-500' :
-                                                                                'bg-slate-400'
+                                                                status === 'rejected' ? 'bg-red-500' :
+                                                                    status === 'shortlisted' ? 'bg-blue-500' :
+                                                                        status === 'reviewing' ? 'bg-yellow-500' :
+                                                                            'bg-slate-400'
                                                                 }`}
                                                             style={{ width: `${percentage}%` }}
                                                         />

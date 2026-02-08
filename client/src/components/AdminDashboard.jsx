@@ -35,7 +35,7 @@ import {
 } from './ui';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
-import { JobPosting } from './JobPosting';
+// JobPosting removed - only Company Admins can post jobs
 import { getJobs } from '../lib/api';
 import { getUsers, getUsersByRole, getUserStats } from '../lib/userApi';
 import { getApplications, approveApplication, rejectApplication } from '../lib/applicationApi';
@@ -46,7 +46,7 @@ export function AdminDashboard() {
   const [candidates, setCandidates] = useState([]);
   const [recruiters, setRecruiters] = useState([]);
   const [userStats, setUserStats] = useState({ total: 0, candidates: 0, recruiters: 0, admins: 0 });
-  const [showJobPosting, setShowJobPosting] = useState(false);
+  // Job posting state removed - only Company Admins can post jobs
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -122,13 +122,6 @@ export function AdminDashboard() {
             <Settings2 className="w-4 h-4" />
             Settings
           </Button>
-          <Button
-            onClick={() => setShowJobPosting(true)}
-            className="bg-slate-900 hover:bg-slate-800 text-white shadow-xl shadow-slate-900/10 gap-2 font-bold px-6"
-          >
-            <Plus className="w-4 h-4" />
-            Post Job
-          </Button>
         </div>
       </div>
 
@@ -185,12 +178,8 @@ export function AdminDashboard() {
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h3 className="text-xl font-black text-slate-900">Active Job Postings</h3>
-                  <p className="text-sm text-slate-500 font-medium mt-0.5">Manage and monitor all job openings</p>
+                  <p className="text-sm text-slate-500 font-medium mt-0.5">View and monitor all job openings (managed by Company Admins)</p>
                 </div>
-                <Button onClick={() => setShowJobPosting(true)} className="bg-[#4285f4] hover:bg-[#3b79db] text-white font-bold">
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Job
-                </Button>
               </div>
 
               {jobs.length > 0 ? (
@@ -233,12 +222,8 @@ export function AdminDashboard() {
                   <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
                     <Briefcase className="w-8 h-8 text-slate-300" />
                   </div>
-                  <h4 className="text-lg font-bold text-slate-900 mb-2">No Jobs Posted</h4>
-                  <p className="text-sm text-slate-500 font-medium mb-6">Start by creating your first job posting</p>
-                  <Button onClick={() => setShowJobPosting(true)} className="bg-[#4285f4] hover:bg-[#3b79db] text-white font-bold">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Post Your First Job
-                  </Button>
+                  <h4 className="text-lg font-bold text-slate-900 mb-2">No Jobs Posted Yet</h4>
+                  <p className="text-sm text-slate-500 font-medium">Company Admins can create job postings from their dashboard</p>
                 </div>
               )}
             </TabsContent>
@@ -277,9 +262,9 @@ export function AdminDashboard() {
                                   <h4 className="font-bold text-slate-900">{app.candidateName || 'Candidate'}</h4>
                                   <Badge
                                     className={`uppercase tracking-widest text-[9px] font-black ${app.status === 'approved' ? 'bg-green-100 text-green-700 border-green-200' :
-                                        app.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-200' :
-                                          app.status === 'interview_scheduled' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                                            'bg-yellow-100 text-yellow-700 border-yellow-200'
+                                      app.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-200' :
+                                        app.status === 'interview_scheduled' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                          'bg-yellow-100 text-yellow-700 border-yellow-200'
                                       }`}
                                   >
                                     {app.status}
@@ -553,17 +538,7 @@ export function AdminDashboard() {
       </Card>
 
       {/* Job Posting Modal */}
-      <AnimatePresence>
-        {showJobPosting && (
-          <JobPosting
-            onComplete={() => {
-              setShowJobPosting(false);
-              fetchData();
-            }}
-            onCancel={() => setShowJobPosting(false)}
-          />
-        )}
-      </AnimatePresence>
+
     </div>
   );
 }

@@ -251,7 +251,7 @@ export function Signup({ onSwitchToLogin }) {
                             </Button>
                         </div>
 
-                        <div className="mt-8 text-center">
+                        <div className="mt-8 text-center space-y-3">
                             <p className="text-slate-500 text-sm">
                                 Already have an account?{' '}
                                 <button
@@ -261,6 +261,17 @@ export function Signup({ onSwitchToLogin }) {
                                     Sign In
                                 </button>
                             </p>
+                            <div className="pt-3 border-t border-slate-100">
+                                <p className="text-slate-500 text-xs">
+                                    Representing a company?{' '}
+                                    <a
+                                        href="/company-signup"
+                                        className="text-[#10b981] font-bold hover:underline"
+                                    >
+                                        Register as Company Admin
+                                    </a>
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </Card>

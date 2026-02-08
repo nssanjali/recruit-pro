@@ -212,7 +212,11 @@ export const getJobCandidates = async (id) => {
         });
         if (!response.ok) throw new Error('Failed to fetch candidates');
         const result = await response.json();
-        return result.data;
+        // Return object with candidates array and includeMatchAnalysis flag
+        return {
+            candidates: result.data,
+            includeMatchAnalysis: result.includeMatchAnalysis
+        };
     } catch (error) {
         console.error('API Error:', error);
         throw error;

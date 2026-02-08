@@ -13,16 +13,18 @@ export function JobCandidates() {
     const [job, setJob] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [includeMatchAnalysis, setIncludeMatchAnalysis] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [jobData, candidatesData] = await Promise.all([
+                const [jobData, candidatesResponse] = await Promise.all([
                     getJob(id),
                     getJobCandidates(id)
                 ]);
                 setJob(jobData);
-                setCandidates(candidatesData || []); // Ensure array
+                setCandidates(candidatesResponse.candidates || []); // Extract candidates array
+                setIncludeMatchAnalysis(candidatesResponse.includeMatchAnalysis || false);
             } catch (err) {
                 console.error("Error fetching data:", err);
                 setError('Failed to load data.');
@@ -64,7 +66,9 @@ export function JobCandidates() {
                         </div>
                         <div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-lg">
                             <Bot className="w-5 h-5 text-emerald-400" />
-                            <span className="font-semibold">{candidates?.length || 0} Candidates Analyzed</span>
+                            <span className="font-semibold">
+                                {candidates?.length || 0} {includeMatchAnalysis ? 'Candidates Analyzed' : 'Candidates'}
+                            </span>
                         </div>
                     </div>
                 </Card>
@@ -104,17 +108,19 @@ export function JobCandidates() {
                                                         {candidate.email}
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <div className="flex items-center gap-2 mb-1 justify-end">
-                                                        <span className="text-2xl font-bold text-slate-900">
-                                                            {Math.round(score)}%
-                                                        </span>
-                                                        <Badge className={getScoreColor(score)}>
-                                                            {getScoreLabel(score)}
-                                                        </Badge>
+                                                {includeMatchAnalysis && (
+                                                    <div className="text-right">
+                                                        <div className="flex items-center gap-2 mb-1 justify-end">
+                                                            <span className="text-2xl font-bold text-slate-900">
+                                                                {Math.round(score)}%
+                                                            </span>
+                                                            <Badge className={getScoreColor(score)}>
+                                                                {getScoreLabel(score)}
+                                                            </Badge>
+                                                        </div>
+                                                        <Progress value={score} className="w-32 h-2 ml-auto" />
                                                     </div>
-                                                    <Progress value={score} className="w-32 h-2 ml-auto" />
-                                                </div>
+                                                )}
                                             </div>
 
                                             <div className="flex items-center gap-3 mt-4">

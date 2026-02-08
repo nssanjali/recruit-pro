@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import passport from '../config/passport.js';
 import {
     register,
+    registerCompany,
     login,
     getMe,
     logout,
@@ -18,6 +19,7 @@ const router = express.Router();
 
 // Traditional email/password routes
 router.post('/register', register);
+router.post('/register-company', registerCompany);
 router.post('/login', login);
 router.get('/logout', logout);
 router.get('/me', protect, getMe);

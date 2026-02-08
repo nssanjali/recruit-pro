@@ -18,6 +18,14 @@ export const register = async (req, res) => {
             });
         }
 
+        // Prevent company_admin registration through regular signup
+        if (role === 'company_admin') {
+            return res.status(400).json({
+                success: false,
+                message: 'Please use the company registration endpoint for company admin accounts'
+            });
+        }
+
         // Create user object based on role
         const userData = {
             name,
@@ -46,6 +54,81 @@ export const register = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error registering user',
+            error: error.message
+        });
+    }
+};
+
+// @desc    Register company admin
+// @route   POST /api/auth/register-company
+// @access  Public
+export const registerCompany = async (req, res) => {
+    try {
+        const { name, email, password, phone, companyInfo } = req.body;
+
+        // Validate required fields
+        if (!name || !email || !password || !companyInfo) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide all required fields'
+            });
+        }
+
+        // Validate company info
+        const { companyName, companyEmail, industry, companySize, location } = companyInfo;
+        if (!companyName || !companyEmail || !industry || !companySize || !location) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide all required company information'
+            });
+        }
+
+        // Check if user already exists
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({
+                success: false,
+                message: 'User already exists with this email'
+            });
+        }
+
+        // Check if company email already exists
+        const existingCompany = await User.findOne({ 'companyInfo.companyEmail': companyEmail });
+        if (existingCompany) {
+            return res.status(400).json({
+                success: false,
+                message: 'Company already registered with this email'
+            });
+        }
+
+        // Create company admin user
+        const userData = {
+            name,
+            email,
+            password,
+            phone,
+            role: 'company_admin',
+            companyInfo: {
+                companyName: companyInfo.companyName,
+                companyEmail: companyInfo.companyEmail,
+                companyWebsite: companyInfo.companyWebsite || '',
+                industry: companyInfo.industry,
+                companySize: companyInfo.companySize,
+                location: companyInfo.location,
+                description: companyInfo.description || ''
+            }
+        };
+
+        // Create user
+        const user = await User.create(userData);
+
+        // Generate token
+        sendTokenResponse(user, 201, res);
+    } catch (error) {
+        console.error('Company registration error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error registering company',
             error: error.message
         });
     }
