@@ -252,15 +252,12 @@ export const getApplications = async () => {
             }
         });
 
-        if (!response.ok) {
-            throw new Error('Failed to fetch applications');
-        }
-
+        if (!response.ok) throw new Error('Failed to fetch applications');
         const result = await response.json();
-        return result.data || [];
+        return result.data;
     } catch (error) {
         console.error('API Error:', error);
-        return [];
+        throw error;
     }
 };
 
