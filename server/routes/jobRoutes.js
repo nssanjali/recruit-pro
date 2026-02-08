@@ -14,7 +14,7 @@ import { protect, authorize } from '../middleware/auth.js';
 const router = express.Router();
 
 router.route('/')
-    .get(protect, getJobs)
+    .get(protect, authorize('admin', 'recruiter', 'company_admin', 'candidate'), getJobs)
     .post(protect, authorize('admin', 'company_admin'), createJob);
 
 router.route('/:id')
