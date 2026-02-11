@@ -1,22 +1,14 @@
 import { isConnected } from '../config/db.js';
 import SchedulingQueue from '../models/SchedulingQueue.js';
-import { mockQueue } from '../mockData.js';
 
 // Check if MongoDB is connected
 const isMongoConnected = () => isConnected();
 
 export const getQueueItems = async (req, res) => {
     try {
-        let queueItems;
-
-        if (isMongoConnected()) {
-            queueItems = await SchedulingQueue.find();
-            // Sort by createdAt descending
-            queueItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        } else {
-            queueItems = mockQueue;
-            console.log('📝 Using mock data (MongoDB not connected)');
-        }
+        let queueItems = await SchedulingQueue.find();
+        // Sort by createdAt descending
+        queueItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         res.status(200).json(queueItems);
     } catch (error) {
@@ -27,21 +19,7 @@ export const getQueueItems = async (req, res) => {
 
 export const createQueueItem = async (req, res) => {
     try {
-        let queueItem;
-
-        if (isMongoConnected()) {
-            queueItem = await SchedulingQueue.create(req.body);
-        } else {
-            queueItem = {
-                _id: Date.now().toString(),
-                ...req.body,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            };
-            mockQueue.push(queueItem);
-            console.log('📝 Using mock data (MongoDB not connected)');
-        }
-
+        const queueItem = await SchedulingQueue.create(req.body);
         res.status(201).json(queueItem);
     } catch (error) {
         console.error('Error creating queue item:', error);
@@ -51,20 +29,10 @@ export const createQueueItem = async (req, res) => {
 
 export const updateQueueItem = async (req, res) => {
     try {
-        let queueItem;
-
-        if (isMongoConnected()) {
-            queueItem = await SchedulingQueue.findByIdAndUpdate(
-                req.params.id,
-                req.body
-            );
-        } else {
-            const index = mockQueue.findIndex(q => q._id === req.params.id);
-            if (index !== -1) {
-                mockQueue[index] = { ...mockQueue[index], ...req.body, updatedAt: new Date() };
-                queueItem = mockQueue[index];
-            }
-        }
+        const queueItem = await SchedulingQueue.findByIdAndUpdate(
+            req.params.id,
+            req.body
+        );
 
         if (!queueItem) {
             return res.status(404).json({ message: 'Queue item not found' });
@@ -79,17 +47,7 @@ export const updateQueueItem = async (req, res) => {
 
 export const deleteQueueItem = async (req, res) => {
     try {
-        let queueItem;
-
-        if (isMongoConnected()) {
-            queueItem = await SchedulingQueue.findByIdAndDelete(req.params.id);
-        } else {
-            const index = mockQueue.findIndex(q => q._id === req.params.id);
-            if (index !== -1) {
-                queueItem = mockQueue.splice(index, 1)[0];
-                console.log('📝 Using mock data (MongoDB not connected)');
-            }
-        }
+        const queueItem = await SchedulingQueue.findByIdAndDelete(req.params.id);
 
         if (!queueItem) {
             return res.status(404).json({ message: 'Queue item not found' });

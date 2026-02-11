@@ -9,7 +9,8 @@ import {
     Building,
     MapPin,
     Calendar,
-    BarChart3
+    BarChart3,
+    Power
 } from 'lucide-react';
 import {
     Card,
@@ -23,16 +24,15 @@ import {
     TabsList,
     TabsTrigger
 } from './ui';
-import { motion, AnimatePresence } from 'motion/react';
-import { JobPosting } from './JobPosting';
-import { getJobs } from '../lib/api';
+import { motion } from 'motion/react';
+import { getJobs, deleteJob, updateJob } from '../lib/api';
 import { getApplications } from '../lib/applicationApi';
+import { toast } from 'sonner';
 
 export function CompanyAdminDashboard({ user }) {
     const navigate = useNavigate();
     const [jobs, setJobs] = useState([]);
     const [applications, setApplications] = useState([]);
-    const [showJobPosting, setShowJobPosting] = useState(false);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -57,6 +57,17 @@ export function CompanyAdminDashboard({ user }) {
             console.error('Error fetching data:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const toggleJobStatus = async (jobId, currentStatus) => {
+        try {
+            const newStatus = currentStatus === 'open' ? 'closed' : 'open';
+            await updateJob(jobId, { status: newStatus });
+            toast.success(`Job ${newStatus === 'open' ? 'activated' : 'deactivated'} successfully!`);
+            fetchData();
+        } catch (err) {
+            toast.error('Failed to update job status');
         }
     };
 
@@ -97,7 +108,7 @@ export function CompanyAdminDashboard({ user }) {
                 </div>
 
                 <Button
-                    onClick={() => setShowJobPosting(true)}
+                    onClick={() => navigate('/post-job')}
                     className="bg-slate-900 hover:bg-slate-800 text-white shadow-xl shadow-slate-900/10 gap-2 font-bold px-6"
                 >
                     <Plus className="w-4 h-4" />
@@ -164,7 +175,7 @@ export function CompanyAdminDashboard({ user }) {
                                     <h3 className="text-xl font-black text-slate-900">Your Job Postings</h3>
                                     <p className="text-sm text-slate-500 font-medium mt-0.5">Manage and monitor your job openings</p>
                                 </div>
-                                <Button onClick={() => setShowJobPosting(true)} className="bg-[#4285f4] hover:bg-[#3b79db] text-white font-bold">
+                                <Button onClick={() => navigate('/post-job')} className="bg-[#4285f4] hover:bg-[#3b79db] text-white font-bold">
                                     <Plus className="w-4 h-4 mr-2" />
                                     New Job
                                 </Button>
@@ -198,19 +209,69 @@ export function CompanyAdminDashboard({ user }) {
                                                     </div>
                                                     <div className="flex items-center gap-3">
                                                         <Badge
-                                                            variant={job.status === 'open' ? 'success' : 'secondary'}
+                                                            variant={
+                                                                job.status === 'open' ? 'success' :
+                                                                    job.status === 'closed' ? 'destructive' :
+                                                                        'secondary'
+                                                            }
                                                             className="uppercase tracking-widest text-[9px] font-black"
                                                         >
-                                                            {job.status}
+                                                            {job.status === 'closed' ? 'INACTIVE' : job.status}
                                                         </Badge>
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="font-bold"
-                                                            onClick={() => navigate(`/jobs/${job._id}/candidates`)}
-                                                        >
-                                                            View Candidates
-                                                        </Button>
+                                                        {job.status === 'draft' ? (
+                                                            <>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="font-bold"
+                                                                    onClick={() => navigate(`/edit-job/${job._id}`)}
+                                                                >
+                                                                    Edit Draft
+                                                                </Button>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="font-bold text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                                    onClick={async () => {
+                                                                        if (window.confirm('Are you sure you want to delete this draft?')) {
+                                                                            try {
+                                                                                await deleteJob(job._id);
+                                                                                toast.success('Draft deleted');
+                                                                                fetchData();
+                                                                            } catch (err) {
+                                                                                toast.error('Failed to delete draft');
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    Delete
+                                                                </Button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className={`font-bold ${job.status === 'open'
+                                                                            ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                                                                            : 'text-slate-600 hover:text-slate-700 hover:bg-slate-50'
+                                                                        }`}
+                                                                    onClick={() => toggleJobStatus(job._id, job.status)}
+                                                                    title={job.status === 'open' ? 'Deactivate job' : 'Activate job'}
+                                                                >
+                                                                    <Power className="w-4 h-4 mr-1" />
+                                                                    {job.status === 'open' ? 'Active' : 'Inactive'}
+                                                                </Button>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="font-bold"
+                                                                    onClick={() => navigate(`/jobs/${job._id}/candidates`)}
+                                                                >
+                                                                    View Candidates
+                                                                </Button>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </Card>
@@ -359,17 +420,6 @@ export function CompanyAdminDashboard({ user }) {
             </Card>
 
             {/* Job Posting Modal */}
-            <AnimatePresence>
-                {showJobPosting && (
-                    <JobPosting
-                        onComplete={() => {
-                            setShowJobPosting(false);
-                            fetchData();
-                        }}
-                        onCancel={() => setShowJobPosting(false)}
-                    />
-                )}
-            </AnimatePresence>
         </div>
     );
 }

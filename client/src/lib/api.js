@@ -147,6 +147,7 @@ export const deleteQueueItem = async (queueId) => {
         throw error;
     }
 };
+
 // Job API
 export const getJobs = async () => {
     try {
@@ -202,6 +203,70 @@ export const createJob = async (jobData) => {
     }
 };
 
+export const getJobById = async (id) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/jobs/${id}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) throw new Error('Failed to fetch job');
+        const result = await response.json();
+        return result.data;
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
+export const updateJob = async (id, jobData) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/jobs/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(jobData),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to update job');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
+export const deleteJob = async (id) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/jobs/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to delete job');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
 export const getJobCandidates = async (id) => {
     try {
         const token = localStorage.getItem('token');
@@ -223,16 +288,16 @@ export const getJobCandidates = async (id) => {
     }
 };
 
-
-
-export const applyJob = async (jobId) => {
+export const applyJob = async (jobId, applicationData = {}) => {
     try {
         const token = localStorage.getItem('token');
         const response = await fetch(`${API_URL}/jobs/${jobId}/apply`, {
             method: 'POST',
             headers: {
+                'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
-            }
+            },
+            body: JSON.stringify(applicationData)
         });
 
         if (!response.ok) {
@@ -259,6 +324,43 @@ export const getApplications = async () => {
         if (!response.ok) throw new Error('Failed to fetch applications');
         const result = await response.json();
         return result.data;
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
+export const getApplicationById = async (id) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/applications/${id}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) throw new Error('Failed to fetch application');
+        return await response.json();
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
+export const updateApplicationStatus = async (id, data) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/applications/${id}/status`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) throw new Error('Failed to update application');
+        return await response.json();
     } catch (error) {
         console.error('API Error:', error);
         throw error;

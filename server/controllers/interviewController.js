@@ -2,7 +2,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { isConnected } from '../config/db.js';
 import Interview from '../models/Interview.js';
 import { sendInterviewNotifications } from '../services/notificationService.js';
-import { mockInterviews } from '../mockData.js';
 
 // Check if MongoDB is connected
 const isMongoConnected = () => isConnected();
@@ -32,36 +31,21 @@ export const scheduleInterview = async (req, res) => {
 
         let interview;
 
-        if (isMongoConnected()) {
-            // Create interview in database
-            interview = await Interview.create(interviewData);
+        // Create interview in database
+        interview = await Interview.create(interviewData);
 
-            // Send notifications to all participants
-            await sendInterviewNotifications({
-                candidate,
-                recruiter,
-                admin,
-                date,
-                time,
-                meetingLink
-            });
+        // Send notifications to all participants
+        await sendInterviewNotifications({
+            candidate,
+            recruiter,
+            admin,
+            date,
+            time,
+            meetingLink
+        });
 
-            // Update notification status
-            interview = await Interview.findByIdAndUpdate(interview._id, { notificationsSent: true });
-        } else {
-            // Use mock data
-            interview = {
-                _id: Date.now().toString(),
-                ...interviewData,
-                notificationsSent: true,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            };
-            mockInterviews.push(interview);
-
-            console.log('📝 Using mock data (MongoDB not connected)');
-            console.log('✅ Interview scheduled:', interview.candidate.name);
-        }
+        // Update notification status
+        interview = await Interview.findByIdAndUpdate(interview._id, { notificationsSent: true });
 
         res.status(201).json({
             message: 'Interview scheduled successfully and notifications sent.',
@@ -75,16 +59,9 @@ export const scheduleInterview = async (req, res) => {
 
 export const getInterviews = async (req, res) => {
     try {
-        let interviews;
-
-        if (isMongoConnected()) {
-            interviews = await Interview.find({ status: 'scheduled' });
-            // Sort by createdAt descending
-            interviews.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        } else {
-            interviews = mockInterviews;
-            console.log('📝 Using mock data (MongoDB not connected)');
-        }
+        let interviews = await Interview.find({ status: 'scheduled' });
+        // Sort by createdAt descending
+        interviews.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         res.status(200).json(interviews);
     } catch (error) {
@@ -95,13 +72,7 @@ export const getInterviews = async (req, res) => {
 
 export const getInterviewById = async (req, res) => {
     try {
-        let interview;
-
-        if (isMongoConnected()) {
-            interview = await Interview.findById(req.params.id);
-        } else {
-            interview = mockInterviews.find(i => i._id === req.params.id);
-        }
+        const interview = await Interview.findById(req.params.id);
 
         if (!interview) {
             return res.status(404).json({ message: 'Interview not found' });
@@ -116,20 +87,10 @@ export const getInterviewById = async (req, res) => {
 
 export const updateInterview = async (req, res) => {
     try {
-        let interview;
-
-        if (isMongoConnected()) {
-            interview = await Interview.findByIdAndUpdate(
-                req.params.id,
-                req.body
-            );
-        } else {
-            const index = mockInterviews.findIndex(i => i._id === req.params.id);
-            if (index !== -1) {
-                mockInterviews[index] = { ...mockInterviews[index], ...req.body, updatedAt: new Date() };
-                interview = mockInterviews[index];
-            }
-        }
+        const interview = await Interview.findByIdAndUpdate(
+            req.params.id,
+            req.body
+        );
 
         if (!interview) {
             return res.status(404).json({ message: 'Interview not found' });
@@ -144,16 +105,7 @@ export const updateInterview = async (req, res) => {
 
 export const deleteInterview = async (req, res) => {
     try {
-        let interview;
-
-        if (isMongoConnected()) {
-            interview = await Interview.findByIdAndDelete(req.params.id);
-        } else {
-            const index = mockInterviews.findIndex(i => i._id === req.params.id);
-            if (index !== -1) {
-                interview = mockInterviews.splice(index, 1)[0];
-            }
-        }
+        const interview = await Interview.findByIdAndDelete(req.params.id);
 
         if (!interview) {
             return res.status(404).json({ message: 'Interview not found' });

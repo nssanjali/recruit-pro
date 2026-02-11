@@ -203,8 +203,8 @@ export function ProfileSettings({ user, onUpdate }) {
                                                     <img src={formData.avatar} alt={user?.role === 'company_admin' ? formData.companyName : formData.name} className="w-full h-full object-cover" />
                                                 ) : (
                                                     <AvatarFallback className={`text-white text-4xl font-black ${user?.role === 'company_admin'
-                                                            ? 'bg-gradient-to-br from-emerald-600 to-emerald-800'
-                                                            : 'bg-gradient-to-br from-slate-900 to-slate-700'
+                                                        ? 'bg-gradient-to-br from-emerald-600 to-emerald-800'
+                                                        : 'bg-gradient-to-br from-slate-900 to-slate-700'
                                                         }`}>
                                                         {user?.role === 'company_admin'
                                                             ? (formData.companyName ? formData.companyName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'CO')
@@ -214,8 +214,8 @@ export function ProfileSettings({ user, onUpdate }) {
                                                 )}
                                             </Avatar>
                                             <label className={`absolute -bottom-2 -right-2 w-12 h-12 text-white rounded-2xl flex items-center justify-center shadow-xl hover:shadow-2xl hover:scale-110 transition-all cursor-pointer border-4 border-white ${user?.role === 'company_admin'
-                                                    ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-emerald-500/30'
-                                                    : 'bg-gradient-to-br from-[#4285f4] to-[#8b5cf6] shadow-[#4285f4]/30'
+                                                ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-emerald-500/30'
+                                                : 'bg-gradient-to-br from-[#4285f4] to-[#8b5cf6] shadow-[#4285f4]/30'
                                                 }`}>
                                                 {uploadingAvatar ? (
                                                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -237,8 +237,8 @@ export function ProfileSettings({ user, onUpdate }) {
                                                 {user?.role === 'company_admin' ? (formData.companyName || 'Company Name') : (formData.name || 'Your Name')}
                                             </h3>
                                             <Badge className={`mt-3 text-white border-none px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${user?.role === 'company_admin'
-                                                    ? 'bg-gradient-to-r from-emerald-500 to-emerald-700'
-                                                    : 'bg-gradient-to-r from-[#4285f4] to-[#8b5cf6]'
+                                                ? 'bg-gradient-to-r from-emerald-500 to-emerald-700'
+                                                : 'bg-gradient-to-r from-[#4285f4] to-[#8b5cf6]'
                                                 }`}>
                                                 {user?.role === 'company_admin' ? 'Company' : (user?.role || 'User')}
                                             </Badge>

@@ -166,63 +166,91 @@ export function CommunicationCenter() {
 
                         {/* Recent Communications */}
                         <TabsContent value="recent" className="mt-6 space-y-4">
-                            {communications.map((comm, index) => {
-                                const TypeIcon = getTypeIcon(comm.type);
-                                return (
-                                    <motion.div
-                                        key={comm.id}
-                                        initial={{ opacity: 0, x: -20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: index * 0.1 }}
-                                    >
-                                        <Card className="p-6 hover:shadow-md transition-all border-slate-100">
-                                            <div className="flex items-start gap-4">
-                                                <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${comm.type === 'email' ? 'from-[#4285f4] to-[#06b6d4]' :
-                                                    comm.type === 'reminder' ? 'from-[#8b5cf6] to-[#d946ef]' :
-                                                        'from-[#10b981] to-[#34d399]'
-                                                    } flex items-center justify-center flex-shrink-0 shadow-lg`}>
-                                                    <TypeIcon className="w-6 h-6 text-white" />
-                                                </div>
+                            {communications.length === 0 ? (
+                                <Card className="p-12 border-2 border-dashed border-slate-200">
+                                    <div className="text-center">
+                                        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                                            <MessageSquare className="w-8 h-8 text-slate-400" />
+                                        </div>
+                                        <h3 className="text-lg font-black text-slate-900 mb-2">No Communications Yet</h3>
+                                        <p className="text-sm text-slate-500 max-w-md mx-auto">
+                                            Communications will appear here once you start scheduling interviews or sending messages to candidates.
+                                        </p>
+                                        <Button className="mt-6 bg-slate-900 hover:bg-slate-800 text-white">
+                                            <Send className="w-4 h-4 mr-2" />
+                                            Send First Message
+                                        </Button>
+                                    </div>
+                                </Card>
+                            ) : (
+                                communications
+                                    .filter(comm =>
+                                        searchQuery === '' ||
+                                        comm.subject?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                        comm.recipient?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                        comm.content?.toLowerCase().includes(searchQuery.toLowerCase())
+                                    )
+                                    .map((comm, index) => {
+                                        const TypeIcon = getTypeIcon(comm.type);
+                                        return (
+                                            <motion.div
+                                                key={comm.id || comm._id || index}
+                                                initial={{ opacity: 0, x: -20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                transition={{ delay: index * 0.1 }}
+                                            >
+                                                <Card className="p-6 hover:shadow-md transition-all border-slate-100">
+                                                    <div className="flex items-start gap-4">
+                                                        <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${comm.type === 'email' ? 'from-[#4285f4] to-[#06b6d4]' :
+                                                            comm.type === 'reminder' ? 'from-[#8b5cf6] to-[#d946ef]' :
+                                                                'from-[#10b981] to-[#34d399]'
+                                                            } flex items-center justify-center flex-shrink-0 shadow-lg`}>
+                                                            <TypeIcon className="w-6 h-6 text-white" />
+                                                        </div>
 
-                                                <div className="flex-1">
-                                                    <div className="flex items-start justify-between mb-2">
                                                         <div className="flex-1">
-                                                            <div className="flex items-center gap-2 mb-1">
-                                                                <h4 className="font-bold text-slate-900">{comm.subject}</h4>
-                                                                {comm.automated && (
-                                                                    <Badge variant="outline" className="border-[#8b5cf6] text-[#8b5cf6] text-[9px] font-black uppercase tracking-wider">
-                                                                        <Bot className="w-3 h-3 mr-1" />
-                                                                        Auto
-                                                                    </Badge>
-                                                                )}
+                                                            <div className="flex items-start justify-between mb-2">
+                                                                <div className="flex-1">
+                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                        <h4 className="font-bold text-slate-900">{comm.subject || 'No Subject'}</h4>
+                                                                        {comm.automated && (
+                                                                            <Badge variant="outline" className="border-[#8b5cf6] text-[#8b5cf6] text-[9px] font-black uppercase tracking-wider">
+                                                                                <Bot className="w-3 h-3 mr-1" />
+                                                                                Auto
+                                                                            </Badge>
+                                                                        )}
+                                                                    </div>
+                                                                    <p className="text-sm text-slate-500 font-medium">To: {comm.recipient || 'Unknown'}</p>
+                                                                </div>
+                                                                {getStatusBadge(comm.status)}
                                                             </div>
-                                                            <p className="text-sm text-slate-500 font-medium">To: {comm.recipient}</p>
-                                                        </div>
-                                                        {getStatusBadge(comm.status)}
-                                                    </div>
 
-                                                    <div className="bg-slate-50 rounded-xl p-4 mb-3">
-                                                        <p className="text-sm text-slate-600 font-medium">{comm.content}</p>
-                                                    </div>
+                                                            <div className="bg-slate-50 rounded-xl p-4 mb-3">
+                                                                <p className="text-sm text-slate-600 font-medium">{comm.content || comm.message || 'No content'}</p>
+                                                            </div>
 
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-4 text-xs text-slate-500 font-medium">
-                                                            <span className="flex items-center gap-1">
-                                                                <Clock className="w-3 h-3" />
-                                                                {comm.status === 'sent' ? comm.sentAt : comm.scheduledFor}
-                                                            </span>
-                                                            <span>Template: {comm.template}</span>
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-4 text-xs text-slate-500 font-medium">
+                                                                    <span className="flex items-center gap-1">
+                                                                        <Clock className="w-3 h-3" />
+                                                                        {comm.status === 'sent'
+                                                                            ? (comm.sentAt || new Date(comm.createdAt).toLocaleString())
+                                                                            : (comm.scheduledFor || new Date(comm.scheduledAt).toLocaleString())
+                                                                        }
+                                                                    </span>
+                                                                    {comm.template && <span>Template: {comm.template}</span>}
+                                                                </div>
+                                                                <Button variant="ghost" size="sm" className="text-[#4285f4] hover:text-[#3b79db] font-bold">
+                                                                    View Details
+                                                                </Button>
+                                                            </div>
                                                         </div>
-                                                        <Button variant="ghost" size="sm" className="text-[#4285f4] hover:text-[#3b79db] font-bold">
-                                                            View Details
-                                                        </Button>
                                                     </div>
-                                                </div>
-                                            </div>
-                                        </Card>
-                                    </motion.div>
-                                );
-                            })}
+                                                </Card>
+                                            </motion.div>
+                                        );
+                                    })
+                            )}
                         </TabsContent>
 
                         {/* Communication Database */}

@@ -16,6 +16,10 @@ import { AuthSuccess } from "./components/AuthSuccess";
 import { CompanySignup } from "./components/CompanySignup";
 import { JobDetails } from "./components/JobDetails";
 import { MatchAnalysis } from "./components/MatchAnalysis";
+import { JobPosting } from "./components/JobPosting";
+import { JobFormBuilderPage } from "./components/JobFormBuilderPage";
+import { AnalyticsDashboard } from "./components/AnalyticsDashboard";
+import { ApplicationReview } from "./components/ApplicationReview";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { Toaster } from "./components/ui";
 import { getCurrentUser } from "./lib/api";
@@ -126,6 +130,23 @@ export default function App() {
                 <CompanyAdminDashboard user={user} />
               </Layout>
             } />
+            <Route path="/post-job" element={
+              <Layout user={user} onLogout={handleLogout} activePage="company-admin">
+                <JobPosting />
+              </Layout>
+            } />
+            <Route path="/edit-job/:id" element={
+              <Layout user={user} onLogout={handleLogout} activePage="company-admin">
+                <JobPosting />
+              </Layout>
+            } />
+            <Route path="/build-form" element={<JobFormBuilderPage />} />
+            <Route path="/build-form/:id" element={<JobFormBuilderPage />} />
+            <Route path="/analytics" element={
+              <Layout user={user} onLogout={handleLogout} activePage="analytics">
+                <AnalyticsDashboard />
+              </Layout>
+            } />
           </Route>
 
           {/* Shared Recruiter & Company Admin Routes */}
@@ -133,6 +154,11 @@ export default function App() {
             <Route path="/jobs/:id/candidates" element={
               <Layout user={user} onLogout={handleLogout} activePage="recruiter">
                 <JobCandidates />
+              </Layout>
+            } />
+            <Route path="/applications/:id/review" element={
+              <Layout user={user} onLogout={handleLogout} activePage="recruiter">
+                <ApplicationReview />
               </Layout>
             } />
           </Route>

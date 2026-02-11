@@ -6,6 +6,7 @@ class Application {
         const db = getDb();
         const application = {
             ...applicationData,
+            formData: applicationData.formData || {}, // Dynamic form responses
             status: 'pending', // pending, reviewing, shortlisted, rejected, accepted
             appliedAt: new Date(),
             updatedAt: new Date()

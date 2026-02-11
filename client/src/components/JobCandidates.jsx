@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getJobCandidates, getJob } from '../lib/api';
 import { Card, Button, Badge, Progress } from './ui';
-import { Bot, Sparkles, User, FileText, ArrowLeft, Mail } from 'lucide-react';
+import { Bot, Sparkles, User, FileText, ArrowLeft, Mail, Eye } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export function JobCandidates() {
@@ -130,6 +130,14 @@ export function JobCandidates() {
                                                         View Resume
                                                     </Button>
                                                 )}
+                                                <Button
+                                                    size="sm"
+                                                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                                                    onClick={() => navigate(`/applications/${candidate._id || candidate.id}/review`)}
+                                                >
+                                                    <Eye className="w-4 h-4 mr-2" />
+                                                    Review Application
+                                                </Button>
                                             </div>
                                         </div>
                                     </div>

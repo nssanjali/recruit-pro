@@ -358,6 +358,8 @@ export const applyJob = async (req, res) => {
     try {
         const jobId = req.params.id;
         const userId = req.user._id;
+        // Get application data from request body (sent by frontend)
+        const applicationData = req.body || {};
 
         const job = await Job.findById(jobId);
 
@@ -376,44 +378,36 @@ export const applyJob = async (req, res) => {
             });
         }
 
-        // Add user to candidates array in Job
+        // Add user to candidates array in Job using atomic operator ($addToSet)
+        // This works because we updated Job.findByIdAndUpdate to support atomic operators
         await Job.findByIdAndUpdate(jobId, {
-            $addToSet: { candidates: userId } // Use addToSet to prevent duplicates
+            $addToSet: { candidates: userId }
         });
 
-        // Check if Application record exists (double check)
-        // Import Application model dynamically to avoid circular dependency issues if any
-        // But better is to import at top if possible. For now assuming top import is possible.
-        // We need to import Application model at the top of the file, let's assume it's there or added.
-        // Wait, I need to check if Application is imported. It is NOT imported in the original file view.
-        // I will add the import in a separate step or just assume dynamic import for safety here?
-        // Let's use string based 'applications' collection insertion if model isn't handy,
-        // BUT better practice: I will add `import Application from '../models/Application.js';` to the top of file in a separate edit if needed.
-        // Actually, I can't easily add import with replace_file_content if I'm editing a function block unless I replace the whole file.
-        // Let's check if I can use the existing `Application` model if I added it? No, I haven't added it yet.
-        // I'll stick to updating the Job candidates for now, and rely on the `Application.create` from `applicationController`?
-        // NO, the plan was to unify it here because `JobDetails.jsx` calls `applyJob` in `jobController`.
-        // So I MUST create the Application record here.
-
-        // Strategy: I will use the `Application` model. I need to ensure it's imported.
-        // Since I am replacing this block, I will assume I'll add the import in a subsequent or previous step.
-        // For now, let's write the code assuming `Application` is available, and I'll add the import immediately after.
-
-        // Check if application exists
+        // Check if Application record exists
         const existingApp = await Application.findOne({
             candidateId: new ObjectId(userId),
             jobId: new ObjectId(jobId)
         });
 
         if (!existingApp) {
-            await Application.create({
+            // Create new application record
+            // Map frontend naming (responses) to backend schema (formData)
+
+            const newApplicationData = {
                 jobId: new ObjectId(jobId),
                 candidateId: new ObjectId(userId),
-                candidateName: req.user.name,
-                candidateEmail: req.user.email,
-                resume: req.user.resume || '',
+                // Use data from form if provided, otherwise fallback to user profile
+                candidateName: applicationData.name || req.user.name,
+                candidateEmail: applicationData.email || req.user.email,
+                phone: applicationData.phone || req.user.phone || '',
+                resume: applicationData.resume || req.user.resume || '',
+                // Map custom field responses to formData
+                formData: applicationData.responses || {},
                 status: 'pending'
-            });
+            };
+
+            await Application.create(newApplicationData);
         }
 
         res.status(200).json({
@@ -424,7 +418,7 @@ export const applyJob = async (req, res) => {
         console.error('Error applying to job:', error);
         res.status(500).json({
             success: false,
-            message: 'Server Error'
+            message: 'Server Error: ' + error.message
         });
     }
 };

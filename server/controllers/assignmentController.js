@@ -1,22 +1,14 @@
 import { isConnected } from '../config/db.js';
 import RecruiterAssignment from '../models/RecruiterAssignment.js';
-import { mockAssignments } from '../mockData.js';
 
 // Check if MongoDB is connected
 const isMongoConnected = () => isConnected();
 
 export const getAssignments = async (req, res) => {
     try {
-        let assignments;
-
-        if (isMongoConnected()) {
-            assignments = await RecruiterAssignment.find();
-            // Sort by createdAt descending
-            assignments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        } else {
-            assignments = mockAssignments;
-            console.log('📝 Using mock data (MongoDB not connected)');
-        }
+        let assignments = await RecruiterAssignment.find();
+        // Sort by createdAt descending
+        assignments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         res.status(200).json(assignments);
     } catch (error) {
@@ -27,21 +19,7 @@ export const getAssignments = async (req, res) => {
 
 export const createAssignment = async (req, res) => {
     try {
-        let assignment;
-
-        if (isMongoConnected()) {
-            assignment = await RecruiterAssignment.create(req.body);
-        } else {
-            assignment = {
-                _id: Date.now().toString(),
-                ...req.body,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            };
-            mockAssignments.push(assignment);
-            console.log('📝 Using mock data (MongoDB not connected)');
-        }
-
+        const assignment = await RecruiterAssignment.create(req.body);
         res.status(201).json(assignment);
     } catch (error) {
         console.error('Error creating assignment:', error);
@@ -51,20 +29,10 @@ export const createAssignment = async (req, res) => {
 
 export const updateAssignment = async (req, res) => {
     try {
-        let assignment;
-
-        if (isMongoConnected()) {
-            assignment = await RecruiterAssignment.findByIdAndUpdate(
-                req.params.id,
-                req.body
-            );
-        } else {
-            const index = mockAssignments.findIndex(a => a._id === req.params.id);
-            if (index !== -1) {
-                mockAssignments[index] = { ...mockAssignments[index], ...req.body, updatedAt: new Date() };
-                assignment = mockAssignments[index];
-            }
-        }
+        const assignment = await RecruiterAssignment.findByIdAndUpdate(
+            req.params.id,
+            req.body
+        );
 
         if (!assignment) {
             return res.status(404).json({ message: 'Assignment not found' });
@@ -79,16 +47,7 @@ export const updateAssignment = async (req, res) => {
 
 export const deleteAssignment = async (req, res) => {
     try {
-        let assignment;
-
-        if (isMongoConnected()) {
-            assignment = await RecruiterAssignment.findByIdAndDelete(req.params.id);
-        } else {
-            const index = mockAssignments.findIndex(a => a._id === req.params.id);
-            if (index !== -1) {
-                assignment = mockAssignments.splice(index, 1)[0];
-            }
-        }
+        const assignment = await RecruiterAssignment.findByIdAndDelete(req.params.id);
 
         if (!assignment) {
             return res.status(404).json({ message: 'Assignment not found' });
@@ -104,31 +63,16 @@ export const deleteAssignment = async (req, res) => {
 export const assignRecruiter = async (req, res) => {
     try {
         const { id } = req.params;
-        let assignment;
+        let assignment = await RecruiterAssignment.findById(id);
 
-        if (isMongoConnected()) {
-            assignment = await RecruiterAssignment.findById(id);
-
-            if (!assignment) {
-                return res.status(404).json({ message: 'Assignment not found' });
-            }
-
-            assignment = await RecruiterAssignment.findByIdAndUpdate(id, {
-                status: 'assigned',
-                recruiter: assignment.aiRecommendation
-            });
-        } else {
-            assignment = mockAssignments.find(a => a._id === id);
-
-            if (!assignment) {
-                return res.status(404).json({ message: 'Assignment not found' });
-            }
-
-            assignment.status = 'assigned';
-            assignment.recruiter = assignment.aiRecommendation;
-            assignment.updatedAt = new Date();
-            console.log('📝 Using mock data (MongoDB not connected)');
+        if (!assignment) {
+            return res.status(404).json({ message: 'Assignment not found' });
         }
+
+        assignment = await RecruiterAssignment.findByIdAndUpdate(id, {
+            status: 'assigned',
+            recruiter: assignment.aiRecommendation
+        });
 
         res.status(200).json(assignment);
     } catch (error) {

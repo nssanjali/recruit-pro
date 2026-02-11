@@ -1,46 +1,40 @@
 import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
     Briefcase,
     MapPin,
     DollarSign,
-    FileText,
-    Users,
-    Sparkles,
-    Zap,
-    ArrowRight,
-    ShieldCheck,
     Building,
-    Clock,
-    CheckCircle2,
-    X,
-    AlertCircle,
-    CloudUpload,
-    Calendar,
-    Award,
-    Target,
+    Users,
+    Code,
     Gift,
-    Code
+    Calendar,
+    Target,
+    Save,
+    Send,
+    ArrowLeft,
+    CheckCircle2,
+    Loader
 } from 'lucide-react';
 import {
     Card,
     CardHeader,
     CardTitle,
     CardContent,
-    Badge,
     Button,
     Input,
-    Textarea
+    Textarea,
+    Badge
 } from './ui';
-import { motion, AnimatePresence } from 'motion/react';
-import { createJob, uploadFile } from '../lib/api';
-import { getTemplates } from '../lib/templateApi';
+import { JobFormBuilderPlayground } from './JobFormBuilderPlayground';
+import { createJob, getJobById, updateJob } from '../lib/api';
+import { toast } from 'sonner';
 
-export function JobPosting({ onComplete, onCancel }) {
+export function JobPosting() {
+    const navigate = useNavigate();
+    const { id } = useParams();
     const [loading, setLoading] = useState(false);
-    const [success, setSuccess] = useState(false);
-    const [error, setError] = useState('');
-    const [templates, setTemplates] = useState([]);
-    const [currentStep, setCurrentStep] = useState(1);
+    const [initialLoading, setInitialLoading] = useState(!!id);
     const [formData, setFormData] = useState({
         title: '',
         company: '',
@@ -57,20 +51,59 @@ export function JobPosting({ onComplete, onCancel }) {
         experience: 'Mid-level',
         openings: '1',
         deadline: '',
-        templateId: '',
-        jdUrl: ''
+        applicationFormConfig: null,
+        status: 'draft' // draft or open
     });
 
+    // Load existing job if editing, or load pending form config for new jobs
     useEffect(() => {
-        fetchTemplates();
-    }, []);
+        if (id) {
+            loadJob();
+        } else {
+            // Load pending form config from sessionStorage for new jobs
+            const savedConfig = sessionStorage.getItem('pendingFormConfig');
+            if (savedConfig) {
+                try {
+                    const config = JSON.parse(savedConfig);
+                    setFormData(prev => ({ ...prev, applicationFormConfig: config }));
+                    // Clear it after loading so it doesn't persist incorrectly
+                    sessionStorage.removeItem('pendingFormConfig');
+                } catch (err) {
+                    console.error('Failed to parse saved config:', err);
+                }
+            }
+        }
+    }, [id]);
 
-    const fetchTemplates = async () => {
+    const loadJob = async () => {
         try {
-            const data = await getTemplates();
-            setTemplates(data || []);
+            const job = await getJobById(id);
+            if (job) {
+                setFormData({
+                    title: job.title || '',
+                    company: job.company || '',
+                    department: job.department || '',
+                    location: job.location || '',
+                    jobType: job.jobType || 'Full-time',
+                    workMode: job.workMode || 'On-site',
+                    salary: job.salary || '',
+                    description: job.description || '',
+                    requirements: job.requirements || '',
+                    responsibilities: job.responsibilities || '',
+                    skills: job.skills || '',
+                    benefits: job.benefits || '',
+                    experience: job.experience || 'Mid-level',
+                    openings: job.openings?.toString() || '1',
+                    deadline: job.deadline || '',
+                    applicationFormConfig: job.applicationFormConfig || null,
+                    status: job.status || 'draft'
+                });
+            }
         } catch (err) {
-            console.error('Error fetching templates:', err);
+            toast.error('Failed to load job');
+            navigate('/company-admin');
+        } finally {
+            setInitialLoading(false);
         }
     };
 
@@ -79,204 +112,208 @@ export function JobPosting({ onComplete, onCancel }) {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleFileUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    const handleFormConfigSave = (config) => {
+        setFormData(prev => ({ ...prev, applicationFormConfig: config }));
+        toast.success('Application form configured successfully!');
+    };
 
+    const handleSaveDraft = async () => {
         setLoading(true);
-        setError('');
         try {
-            const url = await uploadFile(file, 'jd');
-            setFormData(prev => ({ ...prev, jdUrl: url }));
+            if (id) {
+                await updateJob(id, { ...formData, status: 'draft' });
+                toast.success('Draft updated successfully!');
+            } else {
+                await createJob({ ...formData, status: 'draft' });
+                toast.success('Job saved as draft!');
+            }
+            setTimeout(() => navigate('/company-admin'), 1500);
         } catch (err) {
-            setError(err.message || 'Failed to upload JD. Please try again.');
+            toast.error(err.message || 'Failed to save draft');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        setError('');
+    const handlePublish = async () => {
+        // Validate required fields
+        if (!formData.title || !formData.company || !formData.location ||
+            !formData.description || !formData.requirements || !formData.skills) {
+            toast.error('Please fill in all required fields');
+            return;
+        }
 
+        setLoading(true);
         try {
-            await createJob(formData);
-            setSuccess(true);
-            setTimeout(() => {
-                if (onComplete) onComplete();
-            }, 2000);
+            if (id) {
+                await updateJob(id, { ...formData, status: 'open' });
+                toast.success('Job updated and published!');
+            } else {
+                await createJob({ ...formData, status: 'open' });
+                toast.success('Job posted successfully!');
+            }
+            setTimeout(() => navigate('/company-admin'), 1500);
         } catch (err) {
-            setError(err.message || 'Failed to post job. Please try again.');
+            toast.error(err.message || 'Failed to post job');
         } finally {
             setLoading(false);
         }
     };
 
-    const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 3));
-    const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
-
-    if (success) {
+    if (initialLoading) {
         return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                <motion.div
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="bg-white rounded-3xl p-12 text-center shadow-2xl max-w-md"
-                >
-                    <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <CheckCircle2 className="w-10 h-10 text-emerald-500" />
-                    </div>
-                    <h2 className="text-2xl font-black text-slate-900 mb-2">Job Posted Successfully!</h2>
-                    <p className="text-slate-500 mb-8">Your job listing is now live and ready to receive applications.</p>
-                    <Button className="bg-slate-900 hover:bg-slate-800" onClick={onComplete}>Back to Dashboard</Button>
-                </motion.div>
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center">
+                <div className="text-center">
+                    <Loader className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+                    <p className="text-slate-600 font-medium">Loading job details...</p>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="w-full max-w-6xl my-8"
-            >
-                <Card className="border-none shadow-2xl bg-white overflow-hidden">
-                    {/* Close Button */}
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+            <div className="max-w-7xl mx-auto px-6 py-8">
+                {/* Header */}
+                <div className="mb-8">
                     <button
-                        onClick={onCancel}
-                        className="absolute top-6 right-6 p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors z-10"
+                        onClick={() => navigate('/company-admin')}
+                        className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-4 font-medium"
                     >
-                        <X className="w-5 h-5" />
+                        <ArrowLeft className="w-4 h-4" />
+                        Back to Dashboard
                     </button>
 
-                    {/* Header */}
-                    <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-8 text-white">
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center">
-                                <Briefcase className="w-7 h-7" />
-                            </div>
-                            <div>
-                                <h2 className="text-3xl font-black tracking-tight">Post a New Job</h2>
-                                <p className="text-white/80 text-sm font-medium mt-1">Create a comprehensive job listing</p>
-                            </div>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h1 className="text-4xl font-black text-slate-900 mb-2">
+                                {id ? 'Edit Job Posting' : 'Create New Job Posting'}
+                            </h1>
+                            <p className="text-slate-600">
+                                {id ? 'Update the details below and save your changes' : 'Fill in the details below and customize the application form'}
+                            </p>
                         </div>
 
-                        {/* Progress Steps */}
-                        <div className="flex items-center gap-4">
-                            {[1, 2, 3].map((step) => (
-                                <div key={step} className="flex items-center flex-1">
-                                    <div className={`flex items-center gap-3 flex-1 ${step < 3 ? 'pr-4' : ''}`}>
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-all ${currentStep >= step ? 'bg-white text-blue-600' : 'bg-white/20 text-white/60'
-                                            }`}>
-                                            {step}
-                                        </div>
-                                        <span className={`text-sm font-bold ${currentStep >= step ? 'text-white' : 'text-white/60'}`}>
-                                            {step === 1 ? 'Basic Info' : step === 2 ? 'Details' : 'Requirements'}
-                                        </span>
-                                    </div>
-                                    {step < 3 && (
-                                        <div className={`h-0.5 flex-1 ${currentStep > step ? 'bg-white' : 'bg-white/20'}`} />
-                                    )}
-                                </div>
-                            ))}
+                        <div className="flex items-center gap-3">
+                            <Button
+                                onClick={() => navigate(id ? `/build-form/${id}` : '/build-form')}
+                                variant="outline"
+                                className="h-12 px-6 border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-bold"
+                            >
+                                <Code className="w-4 h-4 mr-2" />
+                                Customize Application Form
+                            </Button>
+                            <Button
+                                onClick={handleSaveDraft}
+                                disabled={loading}
+                                className="h-12 px-6 bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold"
+                            >
+                                <Save className="w-4 h-4 mr-2" />
+                                Save as Draft
+                            </Button>
+                            <Button
+                                onClick={handlePublish}
+                                disabled={loading}
+                                className="h-12 px-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold"
+                            >
+                                {loading ? (
+                                    <>
+                                        <Loader className="w-4 h-4 mr-2 animate-spin" />
+                                        Publishing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Send className="w-4 h-4 mr-2" />
+                                        Publish Job
+                                    </>
+                                )}
+                            </Button>
                         </div>
                     </div>
+                </div>
 
-                    {/* Error Message */}
-                    <AnimatePresence>
-                        {error && (
-                            <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                className="px-8 pt-6"
-                            >
-                                <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-medium flex items-center gap-3">
-                                    <AlertCircle className="w-5 h-5" />
-                                    {error}
+                <div className="max-w-5xl mx-auto">
+                    {/* Main Content - Full Width */}
+                    <div className="space-y-6">
+                        {/* Basic Information */}
+                        <Card className="border-slate-200 shadow-lg">
+                            <CardHeader className="border-b border-slate-100">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                                        <Briefcase className="w-5 h-5 text-blue-600" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-xl font-black">Basic Information</CardTitle>
+                                        <p className="text-sm text-slate-500 mt-0.5">Essential job details</p>
+                                    </div>
                                 </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-
-                    {/* Form */}
-                    <form onSubmit={handleSubmit} className="p-8">
-                        {/* Step 1: Basic Information */}
-                        {currentStep === 1 && (
-                            <motion.div
-                                initial={{ opacity: 0, x: 20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                className="space-y-6"
-                            >
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            </CardHeader>
+                            <CardContent className="p-6 space-y-5">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Job Title *</label>
-                                        <div className="relative">
-                                            <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                            <Input
-                                                name="title"
-                                                value={formData.title}
-                                                onChange={handleChange}
-                                                placeholder="e.g. Senior Full Stack Developer"
-                                                className="pl-10 h-12"
-                                                required
-                                            />
-                                        </div>
+                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                            Job Title <span className="text-red-500">*</span>
+                                        </label>
+                                        <Input
+                                            name="title"
+                                            value={formData.title}
+                                            onChange={handleChange}
+                                            placeholder="e.g. Senior Full Stack Developer"
+                                            className="h-12"
+                                            required
+                                        />
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Company *</label>
-                                        <div className="relative">
-                                            <Building className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                            <Input
-                                                name="company"
-                                                value={formData.company}
-                                                onChange={handleChange}
-                                                placeholder="e.g. TechCorp Inc."
-                                                className="pl-10 h-12"
-                                                required
-                                            />
-                                        </div>
+                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                            Company <span className="text-red-500">*</span>
+                                        </label>
+                                        <Input
+                                            name="company"
+                                            value={formData.company}
+                                            onChange={handleChange}
+                                            placeholder="e.g. TechCorp Inc."
+                                            className="h-12"
+                                            required
+                                        />
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Department *</label>
-                                        <div className="relative">
-                                            <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                            <Input
-                                                name="department"
-                                                value={formData.department}
-                                                onChange={handleChange}
-                                                placeholder="e.g. Engineering"
-                                                className="pl-10 h-12"
-                                                required
-                                            />
-                                        </div>
+                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                            Department <span className="text-red-500">*</span>
+                                        </label>
+                                        <Input
+                                            name="department"
+                                            value={formData.department}
+                                            onChange={handleChange}
+                                            placeholder="e.g. Engineering"
+                                            className="h-12"
+                                            required
+                                        />
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Location *</label>
-                                        <div className="relative">
-                                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                            <Input
-                                                name="location"
-                                                value={formData.location}
-                                                onChange={handleChange}
-                                                placeholder="e.g. San Francisco, CA"
-                                                className="pl-10 h-12"
-                                                required
-                                            />
-                                        </div>
+                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                            Location <span className="text-red-500">*</span>
+                                        </label>
+                                        <Input
+                                            name="location"
+                                            value={formData.location}
+                                            onChange={handleChange}
+                                            placeholder="e.g. San Francisco, CA"
+                                            className="h-12"
+                                            required
+                                        />
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Job Type *</label>
+                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                            Job Type <span className="text-red-500">*</span>
+                                        </label>
                                         <select
                                             name="jobType"
                                             value={formData.jobType}
@@ -292,7 +329,9 @@ export function JobPosting({ onComplete, onCancel }) {
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Work Mode *</label>
+                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                            Work Mode <span className="text-red-500">*</span>
+                                        </label>
                                         <select
                                             name="workMode"
                                             value={formData.workMode}
@@ -307,7 +346,9 @@ export function JobPosting({ onComplete, onCancel }) {
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Experience Level *</label>
+                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                            Experience Level <span className="text-red-500">*</span>
+                                        </label>
                                         <select
                                             name="experience"
                                             value={formData.experience}
@@ -324,65 +365,71 @@ export function JobPosting({ onComplete, onCancel }) {
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Salary Range *</label>
-                                        <div className="relative">
-                                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                            <Input
-                                                name="salary"
-                                                value={formData.salary}
-                                                onChange={handleChange}
-                                                placeholder="e.g. $120k - $180k"
-                                                className="pl-10 h-12"
-                                                required
-                                            />
-                                        </div>
+                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                            Salary Range <span className="text-red-500">*</span>
+                                        </label>
+                                        <Input
+                                            name="salary"
+                                            value={formData.salary}
+                                            onChange={handleChange}
+                                            placeholder="e.g. $120k - $180k"
+                                            className="h-12"
+                                            required
+                                        />
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Number of Openings *</label>
-                                        <div className="relative">
-                                            <Target className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                            <Input
-                                                type="number"
-                                                name="openings"
-                                                value={formData.openings}
-                                                onChange={handleChange}
-                                                placeholder="1"
-                                                min="1"
-                                                className="pl-10 h-12"
-                                                required
-                                            />
-                                        </div>
+                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                            Number of Openings <span className="text-red-500">*</span>
+                                        </label>
+                                        <Input
+                                            type="number"
+                                            name="openings"
+                                            value={formData.openings}
+                                            onChange={handleChange}
+                                            placeholder="1"
+                                            min="1"
+                                            className="h-12"
+                                            required
+                                        />
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Application Deadline</label>
-                                        <div className="relative">
-                                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                            <Input
-                                                type="date"
-                                                name="deadline"
-                                                value={formData.deadline}
-                                                onChange={handleChange}
-                                                className="pl-10 h-12"
-                                            />
-                                        </div>
+                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                            Application Deadline
+                                        </label>
+                                        <Input
+                                            type="date"
+                                            name="deadline"
+                                            value={formData.deadline}
+                                            onChange={handleChange}
+                                            className="h-12"
+                                        />
                                     </div>
                                 </div>
-                            </motion.div>
-                        )}
+                            </CardContent>
+                        </Card>
 
-                        {/* Step 2: Job Details */}
-                        {currentStep === 2 && (
-                            <motion.div
-                                initial={{ opacity: 0, x: 20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                className="space-y-6"
-                            >
+                        {/* Job Description */}
+                        <Card className="border-slate-200 shadow-lg">
+                            <CardHeader className="border-b border-slate-100">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+                                        <Building className="w-5 h-5 text-purple-600" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-xl font-black">Job Details</CardTitle>
+                                        <p className="text-sm text-slate-500 mt-0.5">Description and responsibilities</p>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-6 space-y-5">
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Job Description *</label>
+                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                        Job Description <span className="text-red-500">*</span>
+                                    </label>
                                     <Textarea
                                         name="description"
                                         value={formData.description}
@@ -394,7 +441,9 @@ export function JobPosting({ onComplete, onCancel }) {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Key Responsibilities *</label>
+                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                        Key Responsibilities <span className="text-red-500">*</span>
+                                    </label>
                                     <Textarea
                                         name="responsibilities"
                                         value={formData.responsibilities}
@@ -406,57 +455,38 @@ export function JobPosting({ onComplete, onCancel }) {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Benefits & Perks</label>
-                                    <div className="relative">
-                                        <Gift className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                                        <Textarea
-                                            name="benefits"
-                                            value={formData.benefits}
-                                            onChange={handleChange}
-                                            placeholder="• Health, dental, and vision insurance&#10;• 401(k) matching&#10;• Flexible PTO&#10;• Remote work options"
-                                            className="pl-10 min-h-[100px]"
-                                        />
+                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                        Benefits & Perks
+                                    </label>
+                                    <Textarea
+                                        name="benefits"
+                                        value={formData.benefits}
+                                        onChange={handleChange}
+                                        placeholder="• Health, dental, and vision insurance&#10;• 401(k) matching&#10;• Flexible PTO&#10;• Remote work options"
+                                        className="min-h-[100px]"
+                                    />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Requirements */}
+                        <Card className="border-slate-200 shadow-lg">
+                            <CardHeader className="border-b border-slate-100">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-xl font-black">Requirements</CardTitle>
+                                        <p className="text-sm text-slate-500 mt-0.5">Qualifications and skills needed</p>
                                     </div>
                                 </div>
-
+                            </CardHeader>
+                            <CardContent className="p-6 space-y-5">
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Upload Job Description (Optional)</label>
-                                    <div className={`flex items-center gap-4 p-4 border-2 border-dashed rounded-xl transition-all ${formData.jdUrl ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200 hover:border-slate-300'
-                                        }`}>
-                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${formData.jdUrl ? 'bg-emerald-500' : 'bg-slate-200'
-                                            }`}>
-                                            {formData.jdUrl ? <CheckCircle2 className="w-6 h-6 text-white" /> : <CloudUpload className="w-6 h-6 text-slate-500" />}
-                                        </div>
-                                        <div className="flex-1">
-                                            <p className={`text-sm font-bold ${formData.jdUrl ? 'text-emerald-700' : 'text-slate-700'}`}>
-                                                {formData.jdUrl ? 'Document uploaded successfully' : 'Upload PDF or DOCX'}
-                                            </p>
-                                            <p className="text-xs text-slate-500">Max size: 10MB</p>
-                                        </div>
-                                        <label className="px-4 py-2 bg-white text-slate-900 text-sm font-bold rounded-lg border-2 border-slate-200 hover:bg-slate-900 hover:text-white transition-all cursor-pointer">
-                                            {formData.jdUrl ? 'Replace' : 'Choose File'}
-                                            <input
-                                                type="file"
-                                                className="hidden"
-                                                accept=".pdf,.doc,.docx"
-                                                onChange={handleFileUpload}
-                                                disabled={loading}
-                                            />
-                                        </label>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        )}
-
-                        {/* Step 3: Requirements */}
-                        {currentStep === 3 && (
-                            <motion.div
-                                initial={{ opacity: 0, x: 20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                className="space-y-6"
-                            >
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Required Qualifications *</label>
+                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                        Required Qualifications <span className="text-red-500">*</span>
+                                    </label>
                                     <Textarea
                                         name="requirements"
                                         value={formData.requirements}
@@ -468,83 +498,62 @@ export function JobPosting({ onComplete, onCancel }) {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Required Skills & Technologies *</label>
-                                    <div className="relative">
-                                        <Code className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                                        <Textarea
-                                            name="skills"
-                                            value={formData.skills}
-                                            onChange={handleChange}
-                                            placeholder="React, Node.js, TypeScript, PostgreSQL, AWS, Docker, Kubernetes"
-                                            className="pl-10 min-h-[100px]"
-                                            required
-                                        />
+                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                        Required Skills & Technologies <span className="text-red-500">*</span>
+                                    </label>
+                                    <Textarea
+                                        name="skills"
+                                        value={formData.skills}
+                                        onChange={handleChange}
+                                        placeholder="React, Node.js, TypeScript, PostgreSQL, AWS, Docker, Kubernetes"
+                                        className="min-h-[100px]"
+                                        required
+                                    />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Application Form Builder */}
+                        <Card className="border-slate-200 shadow-lg">
+                            <CardHeader className="border-b border-slate-100">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
+                                        <Users className="w-5 h-5 text-orange-600" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-xl font-black">Application Form</CardTitle>
+                                        <p className="text-sm text-slate-500 mt-0.5">Customize fields for candidates</p>
                                     </div>
                                 </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Application Form Template</label>
-                                    <select
-                                        name="templateId"
-                                        value={formData.templateId}
-                                        onChange={handleChange}
-                                        className="w-full h-12 px-4 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            </CardHeader>
+                            <CardContent className="p-6">
+                                <div className="text-center py-8">
+                                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mx-auto mb-4">
+                                        <Code className="w-8 h-8 text-white" />
+                                    </div>
+                                    <h4 className="text-lg font-bold text-slate-900 mb-2">Visual Form Builder</h4>
+                                    <p className="text-sm text-slate-600 mb-6 max-w-md mx-auto">
+                                        Create a custom application form with our playground-style builder.
+                                        Add fields, set validation, and preview in real-time.
+                                    </p>
+                                    <Button
+                                        onClick={() => navigate(id ? `/build-form/${id}` : '/build-form')}
+                                        className="h-12 px-8 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold"
                                     >
-                                        <option value="">Default Application Form</option>
-                                        {templates.map(template => (
-                                            <option key={template._id} value={template._id}>
-                                                {template.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <p className="text-xs text-slate-500 mt-1">Select a custom application form template for this job</p>
-                                </div>
-                            </motion.div>
-                        )}
-
-                        {/* Navigation Buttons */}
-                        <div className="flex items-center justify-between pt-8 mt-8 border-t border-slate-100">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={currentStep === 1 ? onCancel : prevStep}
-                                className="px-6 h-12"
-                            >
-                                {currentStep === 1 ? 'Cancel' : 'Previous'}
-                            </Button>
-
-                            {currentStep < 3 ? (
-                                <Button
-                                    type="button"
-                                    onClick={nextStep}
-                                    className="px-8 h-12 bg-blue-600 hover:bg-blue-700 text-white"
-                                >
-                                    Next Step
-                                    <ArrowRight className="w-4 h-4 ml-2" />
-                                </Button>
-                            ) : (
-                                <Button
-                                    type="submit"
-                                    className="px-8 h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
-                                    disabled={loading}
-                                >
-                                    {loading ? (
-                                        <>
-                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                                            Posting...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Sparkles className="w-4 h-4 mr-2" />
-                                            Post Job
-                                        </>
+                                        <Code className="w-4 h-4 mr-2" />
+                                        Open Form Builder
+                                    </Button>
+                                    {formData.applicationFormConfig?.customFields?.length > 0 && (
+                                        <p className="text-xs text-emerald-600 font-medium mt-3">
+                                            ✓ {formData.applicationFormConfig.customFields.length} custom {formData.applicationFormConfig.customFields.length === 1 ? 'field' : 'fields'} configured
+                                        </p>
                                     )}
-                                </Button>
-                            )}
-                        </div>
-                    </form>
-                </Card>
-            </motion.div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
