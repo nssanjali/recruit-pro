@@ -18,6 +18,7 @@ import applicationRoutes from './routes/applicationRoutes.js';
 import templateRoutes from './routes/templateRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import communicationRoutes from './routes/communicationRoutes.js';
+import recruiterRoutes from './routes/recruiterRoutes.js';
 
 import { initializeCronJobs } from './services/cronService.js';
 
@@ -73,6 +74,7 @@ app.use('/api/applications', applicationRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/communications', communicationRoutes);
+app.use('/api/recruiters', recruiterRoutes);
 
 // Health / root endpoint
 app.get('/', (req, res) => {

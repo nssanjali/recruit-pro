@@ -38,14 +38,18 @@ export const getApplications = async (req, res) => {
 // @access  Private
 export const getApplication = async (req, res) => {
     try {
+        console.log('🔍 Fetching application with ID:', req.params.id);
         const application = await Application.findById(req.params.id);
 
         if (!application) {
+            console.log('❌ Application not found with ID:', req.params.id);
             return res.status(404).json({
                 success: false,
                 message: 'Application not found'
             });
         }
+
+        console.log('✅ Application found:', application._id);
 
         // Check authorization
         if (req.user.role === 'candidate' && application.candidateId.toString() !== req.user._id.toString()) {
@@ -55,15 +59,84 @@ export const getApplication = async (req, res) => {
             });
         }
 
+        // Populate candidate and job details
+        const { getDb } = await import('../config/db.js');
+        const db = getDb();
+
+        // Get candidate details
+        const candidate = await db.collection('users').findOne({
+            _id: application.candidateId
+        });
+
+        // Get job details
+        const job = await db.collection('jobs').findOne({
+            _id: application.jobId
+        });
+
+        // Calculate match score if not already present
+        let matchScore = application.matchScore || 0;
+        let aiAnalysis = application.aiAnalysis || null;
+
+        if (candidate?.resume && job?.description) {
+            const { parseResume, calculateMatchScore } = await import('../utils/resumeMatcher.js');
+
+            // Use stored resume text if available, otherwise parse
+            let resumeText = candidate.resumeText || application.resumeText;
+            if (!resumeText && candidate.resume) {
+                resumeText = await parseResume(candidate.resume);
+            }
+
+            if (resumeText) {
+                const matchResult = calculateMatchScore(
+                    job.description + ' ' + (job.requirements || ''),
+                    resumeText
+                );
+                matchScore = matchResult.score;
+                aiAnalysis = {
+                    matchScore: matchResult.score,
+                    summary: matchResult.summary,
+                    insights: {
+                        strengths: matchResult.strongMatches?.join(', ') || 'N/A',
+                        concerns: matchResult.missingKeywords?.join(', ') || 'None',
+                        experience: `Experience Score: ${matchResult.experienceScore}%`,
+                        skills: `Skills Coverage: ${matchResult.skillsScore}%`
+                    }
+                };
+            }
+        }
+
+        // Build enriched response
+        const enrichedApplication = {
+            ...application,
+            candidate: candidate ? {
+                _id: candidate._id,
+                name: candidate.name,
+                email: candidate.email,
+                phone: candidate.phone,
+                resume: candidate.resume
+            } : null,
+            job: job ? {
+                _id: job._id,
+                title: job.title,
+                company: job.company,
+                department: job.department,
+                location: job.location
+            } : null,
+            matchScore,
+            aiAnalysis,
+            // Map formData to responses for frontend compatibility
+            responses: application.formData || application.responses || {}
+        };
+
         res.status(200).json({
             success: true,
-            data: application
+            data: enrichedApplication
         });
     } catch (error) {
         console.error('Error fetching application:', error);
         res.status(500).json({
             success: false,
-            message: 'Server Error'
+            message: 'Server Error: ' + error.message
         });
     }
 };

@@ -99,13 +99,14 @@ export function Layout({ children, user, onLogout }) {
 
     const menuItems = [
         { id: 'candidate', icon: LayoutDashboard, label: 'Dashboard', path: '/candidate', roles: ['candidate'] },
-        { id: 'recruiter', icon: Users, label: 'Recruiter Dashboard', path: '/recruiter', roles: ['recruiter'] },
-        { id: 'scheduling', icon: Calendar, label: 'Scheduling', path: '/scheduling', roles: ['recruiter', 'admin'] },
-        { id: 'assignment', icon: UserCheck, label: 'Assignments', path: '/assignment', roles: ['recruiter', 'admin'] },
+        { id: 'recruiter', icon: LayoutDashboard, label: 'Dashboard', path: '/recruiter', roles: ['recruiter'] },
+        { id: 'communication', icon: Mail, label: 'Messages', path: '/communication', roles: ['recruiter'] },
+        { id: 'scheduling', icon: Calendar, label: 'Scheduling', path: '/scheduling', roles: ['admin'] },
+        { id: 'assignment', icon: UserCheck, label: 'Assignments', path: '/assignment', roles: ['admin'] },
         { id: 'company-admin', icon: LayoutDashboard, label: user?.role === 'company_admin' ? 'Home' : 'Company Dashboard', path: '/company-admin', roles: ['company_admin'] },
         { id: 'analytics', icon: BarChart3, label: 'Analytics', path: '/analytics', roles: ['company_admin'] },
-        { id: 'communication', icon: Mail, label: user?.role === 'company_admin' ? 'Portal' : 'Messages', path: '/communication', roles: ['candidate', 'recruiter', 'admin', 'company_admin'] },
-        { id: 'extension', icon: Sparkles, label: 'Evaluations', path: '/extension', roles: ['candidate', 'recruiter', 'admin', 'company_admin'] },
+        { id: 'communication-all', icon: Mail, label: user?.role === 'company_admin' ? 'Portal' : 'Messages', path: '/communication', roles: ['candidate', 'admin', 'company_admin'] },
+        { id: 'extension', icon: Sparkles, label: 'Evaluations', path: '/extension', roles: ['candidate', 'admin', 'company_admin'] },
         { id: 'admin', icon: BarChart3, label: 'Admin Dashboard', path: '/admin', roles: ['admin'] },
     ];
 

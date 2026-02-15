@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { Layout } from "./components/Layout";
 import { CandidateDashboard } from "./components/CandidateDashboard";
 import { RecruiterDashboard } from "./components/RecruiterDashboard";
+import { RecruiterProfile } from "./components/RecruiterProfile";
 import { ProfileSettings } from "./components/ProfileSettings";
 import { AdminDashboard } from "./components/AdminDashboard";
 import { CompanyAdminDashboard } from "./components/CompanyAdminDashboard";
@@ -176,7 +177,11 @@ export default function App() {
           } />
           <Route path="/profile" element={
             <Layout user={user} onLogout={handleLogout} activePage="profile">
-              <ProfileSettings user={user} onUpdate={(updatedUser) => setUser(updatedUser)} />
+              {user?.role === 'recruiter' ? (
+                <RecruiterProfile user={user} />
+              ) : (
+                <ProfileSettings user={user} onUpdate={(updatedUser) => setUser(updatedUser)} />
+              )}
             </Layout>
           } />
           <Route path="/jobs/:id" element={

@@ -13,12 +13,47 @@ export const getJobs = async (req, res) => {
 
         // Role-based filtering:
         // - company_admin: sees only jobs they posted
+        // - recruiter: sees only jobs mapped to them
         // - admin: sees all jobs
-        // - recruiter/candidate: sees all jobs
+        // - candidate: sees all jobs
         console.log(`getJobs request from user: ${req.user._id} (Role: ${req.user.role})`);
 
         if (req.user.role === 'company_admin') {
             query.postedBy = req.user._id;
+        } else if (req.user.role === 'recruiter') {
+            // Get recruiter profile
+            const { default: Recruiter } = await import('../models/Recruiter.js');
+            const { default: JobRecruiterMapping } = await import('../models/JobRecruiterMapping.js');
+
+            const recruiter = await Recruiter.findOne({ userId: req.user._id });
+
+            if (recruiter) {
+                // Get job IDs mapped to this recruiter
+                const mappings = await JobRecruiterMapping.find({
+                    recruiterId: recruiter._id,
+                    status: 'active'
+                });
+
+                const jobIds = mappings.map(m => m.jobId);
+
+                if (jobIds.length > 0) {
+                    query._id = { $in: jobIds };
+                } else {
+                    // No jobs mapped, return empty array
+                    return res.status(200).json({
+                        success: true,
+                        count: 0,
+                        data: []
+                    });
+                }
+            } else {
+                // Recruiter profile not found, return empty
+                return res.status(200).json({
+                    success: true,
+                    count: 0,
+                    data: []
+                });
+            }
         }
 
         console.log('getJobs query:', JSON.stringify(query));
@@ -32,9 +67,10 @@ export const getJobs = async (req, res) => {
             data: jobs
         });
     } catch (error) {
+        console.error('Error in getJobs:', error);
         res.status(500).json({
             success: false,
-            message: 'Server Error'
+            message: 'Server Error: ' + error.message
         });
     }
 };
@@ -283,8 +319,11 @@ export const getJobCandidates = async (req, res) => {
             }
 
             const { password, ...candidateData } = candidate._doc || candidate; // Handle Mongoose document
+            const appId = application?._id?.toString();
+            console.log(`📋 Candidate ${candidate.name} - Application ID: ${appId}`);
             return {
                 ...candidateData,
+                applicationId: appId, // Convert ObjectId to string for JSON
                 resume: resumeUrl, // Explicitly include the resume URL found
                 matchScore: includeMatchAnalysis ? matchScore : undefined, // Only include if authorized
                 analysis: includeMatchAnalysis ? analysis : undefined,    // Only include if authorized
@@ -361,6 +400,11 @@ export const applyJob = async (req, res) => {
         // Get application data from request body (sent by frontend)
         const applicationData = req.body || {};
 
+        console.log('📝 Job Application Request:');
+        console.log('  Job ID:', jobId);
+        console.log('  User ID:', userId);
+        console.log('  Application Data:', applicationData);
+
         const job = await Job.findById(jobId);
 
         if (!job) {
@@ -372,6 +416,7 @@ export const applyJob = async (req, res) => {
 
         // Check if already applied (in Job model)
         if (job.candidates && job.candidates.some(id => id.toString() === userId.toString())) {
+            console.log('⚠️  User already applied to this job');
             return res.status(400).json({
                 success: false,
                 message: 'You have already applied to this job'
@@ -383,6 +428,7 @@ export const applyJob = async (req, res) => {
         await Job.findByIdAndUpdate(jobId, {
             $addToSet: { candidates: userId }
         });
+        console.log('✅ Added candidate to job.candidates array');
 
         // Check if Application record exists
         const existingApp = await Application.findOne({
@@ -390,7 +436,10 @@ export const applyJob = async (req, res) => {
             jobId: new ObjectId(jobId)
         });
 
-        if (!existingApp) {
+        if (existingApp) {
+            console.log('ℹ️  Application record already exists:', existingApp._id);
+        } else {
+            console.log('📋 Creating new application record...');
             // Create new application record
             // Map frontend naming (responses) to backend schema (formData)
 
@@ -407,7 +456,10 @@ export const applyJob = async (req, res) => {
                 status: 'pending'
             };
 
-            await Application.create(newApplicationData);
+            console.log('  Application Data:', newApplicationData);
+
+            const createdApp = await Application.create(newApplicationData);
+            console.log('✅ Application created with ID:', createdApp._id);
         }
 
         res.status(200).json({
@@ -415,7 +467,7 @@ export const applyJob = async (req, res) => {
             message: 'Application submitted successfully'
         });
     } catch (error) {
-        console.error('Error applying to job:', error);
+        console.error('❌ Error applying to job:', error);
         res.status(500).json({
             success: false,
             message: 'Server Error: ' + error.message

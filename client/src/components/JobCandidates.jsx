@@ -133,7 +133,7 @@ export function JobCandidates() {
                                                 <Button
                                                     size="sm"
                                                     className="bg-blue-600 hover:bg-blue-700 text-white"
-                                                    onClick={() => navigate(`/applications/${candidate._id || candidate.id}/review`)}
+                                                    onClick={() => navigate(`/applications/${candidate.applicationId}/review`)}
                                                 >
                                                     <Eye className="w-4 h-4 mr-2" />
                                                     Review Application

@@ -464,3 +464,4 @@ export const uploadFile = async (file, type = 'file') => {
         throw error;
     }
 };
+

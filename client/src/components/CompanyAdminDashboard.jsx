@@ -28,6 +28,7 @@ import { motion } from 'motion/react';
 import { getJobs, deleteJob, updateJob } from '../lib/api';
 import { getApplications } from '../lib/applicationApi';
 import { toast } from 'sonner';
+import { RecruiterManagement } from './RecruiterManagement';
 
 export function CompanyAdminDashboard({ user }) {
     const navigate = useNavigate();
@@ -47,12 +48,23 @@ export function CompanyAdminDashboard({ user }) {
             ]);
 
             setJobs(jobsData || []);
+
             // Filter applications to only show those for this company admin's jobs
             const myJobIds = (jobsData || []).map(j => j._id);
             const myApplications = (applicationsData || []).filter(app =>
                 myJobIds.includes(app.jobId)
             );
-            setApplications(myApplications);
+
+            // Enrich applications with job titles
+            const enrichedApplications = myApplications.map(app => {
+                const job = jobsData.find(j => j._id === app.jobId);
+                return {
+                    ...app,
+                    jobTitle: job?.title || 'Unknown Position'
+                };
+            });
+
+            setApplications(enrichedApplications);
         } catch (error) {
             console.error('Error fetching data:', error);
         } finally {
@@ -165,6 +177,7 @@ export function CompanyAdminDashboard({ user }) {
                         <TabsList className="bg-slate-100/80 p-1 rounded-xl mb-6">
                             <TabsTrigger value="jobs" className="text-[11px] font-bold px-4 h-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">MY JOBS</TabsTrigger>
                             <TabsTrigger value="applications" className="text-[11px] font-bold px-4 h-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">APPLICATIONS</TabsTrigger>
+                            <TabsTrigger value="recruiters" className="text-[11px] font-bold px-4 h-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">RECRUITERS</TabsTrigger>
                             <TabsTrigger value="analytics" className="text-[11px] font-bold px-4 h-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">ANALYTICS</TabsTrigger>
                         </TabsList>
 
@@ -253,8 +266,8 @@ export function CompanyAdminDashboard({ user }) {
                                                                     variant="outline"
                                                                     size="sm"
                                                                     className={`font-bold ${job.status === 'open'
-                                                                            ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
-                                                                            : 'text-slate-600 hover:text-slate-700 hover:bg-slate-50'
+                                                                        ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                                                                        : 'text-slate-600 hover:text-slate-700 hover:bg-slate-50'
                                                                         }`}
                                                                     onClick={() => toggleJobStatus(job._id, job.status)}
                                                                     title={job.status === 'open' ? 'Deactivate job' : 'Activate job'}
@@ -317,7 +330,17 @@ export function CompanyAdminDashboard({ user }) {
                                                         </div>
                                                         <div>
                                                             <h4 className="font-bold text-slate-900 mb-1">{app.candidateName || 'Candidate'}</h4>
-                                                            <p className="text-sm text-slate-500 font-medium">Applied {new Date(app.createdAt).toLocaleDateString()}</p>
+                                                            <div className="flex items-center gap-3 text-xs text-slate-500 font-medium">
+                                                                <span className="flex items-center gap-1">
+                                                                    <Briefcase className="w-3 h-3" />
+                                                                    {app.jobTitle || 'Job Position'}
+                                                                </span>
+                                                                <span>•</span>
+                                                                <span className="flex items-center gap-1">
+                                                                    <Calendar className="w-3 h-3" />
+                                                                    Applied {new Date(app.appliedAt || app.createdAt).toLocaleDateString()}
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-3">
@@ -330,6 +353,14 @@ export function CompanyAdminDashboard({ user }) {
                                                         >
                                                             {app.status}
                                                         </Badge>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="font-bold"
+                                                            onClick={() => navigate(`/applications/${app._id}/review`)}
+                                                        >
+                                                            Review
+                                                        </Button>
                                                     </div>
                                                 </div>
                                             </Card>
@@ -414,6 +445,11 @@ export function CompanyAdminDashboard({ user }) {
                                     </div>
                                 </Card>
                             </div>
+                        </TabsContent>
+
+                        {/* Recruiters Tab */}
+                        <TabsContent value="recruiters" className="space-y-4">
+                            <RecruiterManagement />
                         </TabsContent>
                     </Tabs>
                 </CardHeader>
