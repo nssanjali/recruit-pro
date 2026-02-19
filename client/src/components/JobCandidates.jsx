@@ -81,7 +81,7 @@ export function JobCandidates() {
                     </Card>
                 ) : (
                     candidates.map((candidate, index) => {
-                        const score = candidate.matchScore || 0;
+                        const score = candidate.finalScore || candidate.matchScore || 0;
                         return (
                             <motion.div
                                 key={candidate._id}

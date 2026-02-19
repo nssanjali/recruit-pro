@@ -193,57 +193,6 @@ export const deleteJob = async (req, res) => {
     }
 };
 
-// @desc    Get candidates for a job with match scores
-// @route   GET /api/jobs/:id/candidates
-// @access  Private (Recruiter, Admin)
-// Helper to sign Cloudinary URLs
-import { v2 as cloudinary } from 'cloudinary';
-
-// Configure Cloudinary (ensure this runs if not already configured globally, 
-// though usually done in config/cloudinary.js, we import v2 from there or configure here)
-// Better to import the configured instance if possible, or re-configure safely.
-// For safety/speed in controller, we'll re-use the env vars.
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-    secure: true
-});
-
-const signResumeUrl = (rawUrl) => {
-    if (!rawUrl || !rawUrl.includes('cloudinary.com')) return null;
-
-    try {
-        const matches = rawUrl.match(/\/upload\/(v\d+)\/(.+)$/);
-        if (!matches || !matches[2]) return rawUrl;
-
-        const version = matches[1].replace('v', '');
-        let publicId = matches[2];
-
-        // Handle PDF specifically: Cloudinary often treats them as 'image' resource_type 
-        // but stripping extension might be needed for the public_id param.
-        const parts = publicId.split('.');
-        if (parts.length > 1) parts.pop(); // Remove extension
-        const idWithoutExt = parts.join('.');
-
-        // PDF delivery is strictly blocked (401) on this account.
-        // We fallback to delivering the resume as a high-quality JPG image (Page 1)
-        // so the recruiter can at least view the content.
-        const signedUrl = cloudinary.url(idWithoutExt, {
-            resource_type: 'image',
-            type: 'upload',
-            sign_url: true,
-            secure: true,
-            format: 'jpg',
-            version: version
-        });
-
-        return signedUrl;
-    } catch (e) {
-        console.error("Error signing URL:", e);
-        return null;
-    }
-};
 
 // @desc    Get candidates for a job with match scores
 // @route   GET /api/jobs/:id/candidates
@@ -293,21 +242,15 @@ export const getJobCandidates = async (req, res) => {
 
             // Use resume from application if available, fallback to user profile
             const application = applications.find(app => app.candidateId.toString() === candidate._id.toString());
-            const rawResumeUrl = application?.resume || candidate.resume;
-
-            // Sign the URL for access
-            const resumeUrl = signResumeUrl(rawResumeUrl);
+            const resumeUrl = application?.resume || candidate.resume;
 
             // Only calculate match scores for authorized roles
             if (includeMatchAnalysis) {
                 // PRIORITIZE DB TEXT (Avoids Cloudinary 401/404 issues on PDF fetch)
                 let resumeText = candidate.resumeText || application?.resumeText;
 
-                if (!resumeText && rawResumeUrl && resumeUrl) {
-                    // For parsing, we MUST use the RAW url (or specific PDF signed url)
-                    // The `resumeUrl` is signed for JPG viewing (browser).
-                    // `parseResume` now handles signing for PDF access internally.
-                    resumeText = await parseResume(rawResumeUrl);
+                if (!resumeText && resumeUrl) {
+                    resumeText = await parseResume(resumeUrl);
                 }
 
                 if (resumeText) {

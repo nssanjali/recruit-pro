@@ -31,10 +31,13 @@ const storage = new CloudinaryStorage({
 
         if (file.fieldname === 'resume') {
             folder = 'recruitpro/resumes';
+            resource_type = 'raw';          // PDFs must be 'raw' for consistent access
         } else if (file.fieldname === 'avatar') {
             folder = 'recruitpro/avatars';
+            resource_type = 'image';
         } else if (file.fieldname === 'jd') {
             folder = 'recruitpro/jds';
+            resource_type = 'raw';
         }
 
         return {

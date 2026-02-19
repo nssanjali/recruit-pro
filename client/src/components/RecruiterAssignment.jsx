@@ -74,7 +74,7 @@ export function RecruiterAssignment() {
       ? Math.round((assignments.filter(a => a.status !== 'no_match').length / assignments.length) * 100)
       : 0,
     avgMatchScore: assignments.length > 0
-      ? Math.round(assignments.reduce((sum, a) => sum + (a.matchScore || 0), 0) / assignments.length)
+      ? Math.round(assignments.reduce((sum, a) => sum + (a.finalScore || a.matchScore || 0), 0) / assignments.length)
       : 0
   };
 
@@ -183,7 +183,7 @@ export function RecruiterAssignment() {
                           <div className="flex items-center gap-2 mb-2">
                             <p className="text-sm font-medium text-foreground">Recommendation</p>
                             <Badge variant="outline" className="border-[#8b5cf6] text-[#8b5cf6]">
-                              {assignment.matchScore}% Match
+                              {assignment.finalScore || assignment.matchScore}% Match
                             </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground mb-3">
@@ -194,9 +194,9 @@ export function RecruiterAssignment() {
                           <div className="space-y-1">
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-muted-foreground">Match Confidence</span>
-                              <span className="text-foreground font-medium">{assignment.matchScore}%</span>
+                              <span className="text-foreground font-medium">{assignment.finalScore || assignment.matchScore}%</span>
                             </div>
-                            <Progress value={assignment.matchScore} className="h-2" />
+                            <Progress value={assignment.finalScore || assignment.matchScore} className="h-2" />
                           </div>
                         </div>
                       </div>

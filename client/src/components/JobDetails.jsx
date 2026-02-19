@@ -361,7 +361,7 @@ export function JobDetails({ user }) {
                                                 <DynamicFormField
                                                     field={field}
                                                     value={formData.customResponses[field.id] || ''}
-                                                    onChange={(value) => handleCustomFieldChange(field.id, value)}
+                                                    onChange={(_fieldId, value) => handleCustomFieldChange(field.id, value)}
                                                 />
                                             </div>
                                         ))}

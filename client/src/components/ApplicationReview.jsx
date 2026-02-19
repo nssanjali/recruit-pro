@@ -97,9 +97,21 @@ export function ApplicationReview() {
         );
     }
 
-    const matchScore = application.matchScore || application.aiAnalysis?.matchScore || 0;
-    const aiInsights = application.aiAnalysis?.insights || application.aiInsights || {};
-    const aiSummary = application.aiAnalysis?.summary || application.aiSummary || 'No AI analysis available yet.';
+    // Map new evaluation fields with fallbacks for old data
+    const matchScore = application.finalScore || application.matchScore || application.aiAnalysis?.matchScore || 0;
+    const aiSummary = application.aiSummary || application.aiAnalysis?.summary || 'No AI analysis available yet.';
+
+    // Map AI strengths and weaknesses
+    const aiStrengths = application.aiStrengths || [];
+    const aiWeaknesses = application.aiWeaknesses || [];
+
+    // Build insights object for compatibility
+    const aiInsights = {
+        strengths: aiStrengths.length > 0 ? aiStrengths.join(', ') : (application.aiAnalysis?.insights?.strengths || ''),
+        concerns: aiWeaknesses.length > 0 ? aiWeaknesses.join(', ') : (application.aiAnalysis?.insights?.concerns || ''),
+        experience: application.aiAnalysis?.insights?.experience || '',
+        skills: application.aiAnalysis?.insights?.skills || ''
+    };
 
     const getScoreColor = (score) => {
         if (score >= 80) return 'from-emerald-500 to-green-600';
@@ -131,13 +143,13 @@ export function ApplicationReview() {
                     <div>
                         <h1 className="text-3xl font-black text-slate-900">Application Review</h1>
                         <p className="text-slate-500 mt-1">
-                            {application.job?.title || 'Position'} • Applied {new Date(application.createdAt).toLocaleDateString()}
+                            {application.job?.title || 'Position'} • Applied {new Date(application.appliedAt || application.createdAt).toLocaleDateString()}
                         </p>
                     </div>
                 </div>
                 <Badge className={`px-4 py-2 text-sm font-bold ${application.status === 'accepted' ? 'bg-green-100 text-green-700' :
-                        application.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                            'bg-yellow-100 text-yellow-700'
+                    application.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                        'bg-yellow-100 text-yellow-700'
                     }`}>
                     {application.status?.toUpperCase() || 'PENDING'}
                 </Badge>
@@ -249,22 +261,39 @@ export function ApplicationReview() {
                         </CardHeader>
                         <CardContent className="p-6 space-y-6">
                             {/* Application Responses */}
-                            {application.responses && Object.keys(application.responses).length > 0 && (
-                                <div>
-                                    <h4 className="font-black text-slate-900 mb-4 flex items-center gap-2">
-                                        <MessageSquare className="w-5 h-5 text-blue-600" />
-                                        Application Responses
-                                    </h4>
-                                    <div className="space-y-3">
-                                        {Object.entries(application.responses).map(([key, value]) => (
-                                            <div key={key} className="p-4 bg-slate-50 rounded-xl">
-                                                <p className="text-sm font-bold text-slate-700 mb-1">{key}</p>
-                                                <p className="text-sm text-slate-600">{value || 'No response'}</p>
-                                            </div>
-                                        ))}
+                            {application.responses && Object.keys(application.responses).length > 0 && (() => {
+                                // Filter out entries whose key looks like a raw field ID (e.g. "field_1234_abc")
+                                // This is a client-side safety net; the backend should already resolve them.
+                                const isFieldId = (key) => /^field_\d+_[a-z0-9]+$/.test(key) || /^mandatory_/.test(key);
+                                const displayResponses = Object.entries(application.responses)
+                                    .filter(([key]) => !isFieldId(key));
+
+                                if (displayResponses.length === 0) return null;
+
+                                const formatValue = (value) => {
+                                    if (Array.isArray(value)) return value.join(', ');
+                                    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+                                    return value || 'No response';
+                                };
+
+                                return (
+                                    <div>
+                                        <h4 className="font-black text-slate-900 mb-4 flex items-center gap-2">
+                                            <MessageSquare className="w-5 h-5 text-blue-600" />
+                                            Application Responses
+                                        </h4>
+                                        <div className="space-y-3">
+                                            {displayResponses.map(([key, value]) => (
+                                                <div key={key} className="p-4 bg-slate-50 rounded-xl">
+                                                    <p className="text-sm font-bold text-slate-700 mb-1">{key}</p>
+                                                    <p className="text-sm text-slate-600 whitespace-pre-wrap">{formatValue(value)}</p>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                );
+                            })()}
+
 
                             {/* Resume */}
                             {application.resume && (
@@ -307,14 +336,26 @@ export function ApplicationReview() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="p-6 space-y-4">
-                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                                <span className="text-sm font-bold text-slate-600">Match Score</span>
-                                <span className="text-lg font-black text-slate-900">{matchScore}%</span>
+                            <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-100">
+                                <span className="text-sm font-bold text-slate-700">Final Score</span>
+                                <span className="text-xl font-black text-blue-600">{matchScore}%</span>
                             </div>
+                            {application.resumeScore !== undefined && (
+                                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                                    <span className="text-xs font-bold text-slate-600">Resume Match</span>
+                                    <span className="text-sm font-black text-slate-900">{application.resumeScore}%</span>
+                                </div>
+                            )}
+                            {application.profileScore !== undefined && (
+                                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                                    <span className="text-xs font-bold text-slate-600">Profile Score</span>
+                                    <span className="text-sm font-black text-slate-900">{application.profileScore}%</span>
+                                </div>
+                            )}
                             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
                                 <span className="text-sm font-bold text-slate-600">Applied</span>
                                 <span className="text-sm font-bold text-slate-900">
-                                    {new Date(application.createdAt).toLocaleDateString()}
+                                    {new Date(application.appliedAt || application.createdAt).toLocaleDateString()}
                                 </span>
                             </div>
                             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">

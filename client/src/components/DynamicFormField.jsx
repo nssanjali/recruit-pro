@@ -16,30 +16,38 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
     };
 
     const renderField = () => {
+        // Support both template fields (field.placeholder) and
+        // formConfig fields (field.config.placeholder)
+        const placeholder = field.placeholder || field.config?.placeholder || '';
+        const options = field.options || field.config?.options || [];
+
         switch (field.type) {
             case 'text':
             case 'email':
             case 'tel':
             case 'url':
+            case 'short_text':
+            case 'phone':
                 return (
                     <input
-                        type={field.type}
+                        type={field.type === 'email' ? 'email' : field.type === 'tel' || field.type === 'phone' ? 'tel' : 'text'}
                         value={value || ''}
                         onChange={(e) => onChange(field.id, e.target.value)}
-                        placeholder={field.placeholder || ''}
+                        placeholder={placeholder}
                         required={field.required}
                         className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     />
                 );
 
             case 'textarea':
+            case 'long_text':
                 return (
                     <textarea
                         value={value || ''}
                         onChange={(e) => onChange(field.id, e.target.value)}
-                        placeholder={field.placeholder || ''}
+                        placeholder={placeholder}
                         required={field.required}
-                        rows={field.rows || 6}
+                        rows={field.rows || field.config?.rows || 6}
                         className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
                     />
                 );
@@ -50,10 +58,10 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
                         type="number"
                         value={value || ''}
                         onChange={(e) => onChange(field.id, e.target.value)}
-                        placeholder={field.placeholder || ''}
+                        placeholder={placeholder}
                         required={field.required}
-                        min={field.min}
-                        max={field.max}
+                        min={field.min ?? field.config?.min}
+                        max={field.max ?? field.config?.max}
                         className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     />
                 );
@@ -70,6 +78,7 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
                 );
 
             case 'select':
+            case 'dropdown':
                 return (
                     <select
                         value={value || ''}
@@ -77,8 +86,8 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
                         required={field.required}
                         className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     >
-                        <option value="">Select an option...</option>
-                        {field.options?.map((option) => (
+                        <option value="">{placeholder || 'Select an option...'}</option>
+                        {options.map((option) => (
                             <option key={option} value={option}>
                                 {option}
                             </option>
@@ -89,7 +98,7 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
             case 'radio':
                 return (
                     <div className="space-y-2">
-                        {field.options?.map((option) => (
+                        {options.map((option) => (
                             <label key={option} className="flex items-center gap-3 p-3 border border-slate-200 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors">
                                 <input
                                     type="radio"
@@ -107,9 +116,10 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
                 );
 
             case 'checkbox':
+            case 'multi_select':
                 return (
                     <div className="space-y-2">
-                        {field.options?.map((option) => (
+                        {options.map((option) => (
                             <label key={option} className="flex items-center gap-3 p-3 border border-slate-200 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors">
                                 <input
                                     type="checkbox"

@@ -1,6 +1,45 @@
 import Application from '../models/Application.js';
 import { ObjectId } from 'mongodb';
 import { autoScheduleInterview } from '../services/automationService.js';
+import { evaluateApplication } from '../utils/resumeMatcher.js';
+import { getDb } from '../config/db.js';
+
+/**
+ * Resolve form field IDs to human-readable labels.
+ * Iterates over the job's applicationFormConfig (mandatory + custom fields)
+ * and returns a new object keyed by the field label instead of the field ID.
+ * Falls back to the raw key if no matching field is found (backwards compat).
+ */
+const resolveFormResponses = (rawResponses, formConfig) => {
+    if (!rawResponses || typeof rawResponses !== 'object') return {};
+
+    // Build a lookup map: fieldId → label
+    const idToLabel = {};
+
+    if (formConfig) {
+        // Mandatory fields (stored as an object keyed by field name)
+        const mandatoryFields = Object.values(formConfig.mandatoryFields || {});
+        for (const field of mandatoryFields) {
+            if (field?.id && field?.label) {
+                idToLabel[field.id] = field.label;
+            }
+        }
+        // Custom fields (stored as an array)
+        for (const field of formConfig.customFields || []) {
+            if (field?.id && field?.label) {
+                idToLabel[field.id] = field.label;
+            }
+        }
+    }
+
+    const resolved = {};
+    for (const [key, value] of Object.entries(rawResponses)) {
+        // Use the human-readable label if available, otherwise keep the raw key
+        const label = idToLabel[key] || key;
+        resolved[label] = value;
+    }
+    return resolved;
+};
 
 // @desc    Get all applications (for recruiter/admin) or user's applications (for candidate)
 // @route   GET /api/applications
@@ -124,8 +163,11 @@ export const getApplication = async (req, res) => {
             } : null,
             matchScore,
             aiAnalysis,
-            // Map formData to responses for frontend compatibility
-            responses: application.formData || application.responses || {}
+            // Map formData to responses with human-readable labels
+            responses: resolveFormResponses(
+                application.formData || application.responses || {},
+                job?.applicationFormConfig
+            )
         };
 
         res.status(200).json({
@@ -185,6 +227,11 @@ export const createApplication = async (req, res) => {
 
         const application = await Application.create(applicationData);
 
+        // Trigger async evaluation (don't wait for it)
+        evaluateApplicationAsync(application._id).catch(err => {
+            console.error('Background evaluation error:', err.message);
+        });
+
         res.status(201).json({
             success: true,
             data: application
@@ -195,6 +242,84 @@ export const createApplication = async (req, res) => {
             success: false,
             message: 'Server Error'
         });
+    }
+};
+
+// Helper function for async evaluation
+const evaluateApplicationAsync = async (applicationId) => {
+    try {
+        console.log(`🔄 Starting evaluation for application ${applicationId}...`);
+
+        const db = getDb();
+        const application = await db.collection('applications').findOne({
+            _id: new ObjectId(applicationId)
+        });
+
+        if (!application) {
+            console.error('Application not found:', applicationId);
+            return;
+        }
+
+        // Fetch job details
+        const job = await db.collection('jobs').findOne({
+            _id: application.jobId
+        });
+
+        if (!job) {
+            console.error('Job not found for application:', applicationId);
+            return;
+        }
+
+        // Fetch candidate details
+        const candidate = await db.collection('users').findOne({
+            _id: application.candidateId
+        });
+
+        if (!candidate) {
+            console.error('Candidate not found for application:', applicationId);
+            return;
+        }
+
+        // Run evaluation
+        const result = await evaluateApplication({
+            resumeUrl: candidate.resume || application.resume,
+            jobDescription: job.description + ' ' + (job.requirements || ''),
+            experienceYears: candidate.experienceYears || 0,
+            skills: candidate.skills || [],
+            projects: candidate.projects || [],
+            // Resolve field IDs so Gemini AI sees readable question labels
+            answers: resolveFormResponses(
+                application.formResponses || application.formData || {},
+                job?.applicationFormConfig
+            )
+        });
+
+        // Save results
+        await db.collection('applications').updateOne(
+            { _id: new ObjectId(applicationId) },
+            {
+                $set: {
+                    finalScore: result.finalScore,
+                    resumeScore: result.resumeScore,
+                    profileScore: result.profileScore,
+                    skillsScore: result.skillsScore,
+                    experienceScore: result.experienceScore,
+                    projectScore: result.projectScore,
+                    strongMatches: result.strongMatches,
+                    missingKeywords: result.missingKeywords,
+                    aiSummary: result.aiSummary,
+                    aiStrengths: result.aiStrengths,
+                    aiWeaknesses: result.aiWeaknesses,
+                    evaluatedAt: new Date(),
+                    updatedAt: new Date()
+                }
+            }
+        );
+
+        console.log(`✅ Application ${applicationId} evaluated: Score ${result.finalScore}`);
+
+    } catch (error) {
+        console.error(`❌ Evaluation failed for application ${applicationId}:`, error.message);
     }
 };
 

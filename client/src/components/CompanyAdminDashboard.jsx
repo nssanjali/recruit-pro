@@ -353,6 +353,18 @@ export function CompanyAdminDashboard({ user }) {
                                                         >
                                                             {app.status}
                                                         </Badge>
+                                                        {(app.finalScore !== undefined || app.matchScore !== undefined) && (
+                                                            <Badge
+                                                                className={`font-black ${(app.finalScore || app.matchScore) >= 80
+                                                                        ? 'bg-green-100 text-green-700 border-green-200'
+                                                                        : (app.finalScore || app.matchScore) >= 50
+                                                                            ? 'bg-blue-100 text-blue-700 border-blue-200'
+                                                                            : 'bg-orange-100 text-orange-700 border-orange-200'
+                                                                    }`}
+                                                            >
+                                                                {app.finalScore || app.matchScore}% Match
+                                                            </Badge>
+                                                        )}
                                                         <Button
                                                             variant="outline"
                                                             size="sm"
