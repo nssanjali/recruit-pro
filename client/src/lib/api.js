@@ -3,10 +3,12 @@ const API_URL = 'http://localhost:5000/api';
 // Interview API
 export const scheduleInterview = async (interviewData) => {
     try {
+        const token = localStorage.getItem('token');
         const response = await fetch(`${API_URL}/interviews/schedule`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify(interviewData),
         });
@@ -267,6 +269,84 @@ export const deleteJob = async (id) => {
     }
 };
 
+export const retryFailedSchedules = async () => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/jobs/retry-scheduling`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(result.message || 'Failed to retry scheduling');
+        }
+        return result.data || result;
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
+export const getMappedRecruiters = async (jobId) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/jobs/${jobId}/mapped-recruiters`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(result.message || 'Failed to fetch mapped recruiters');
+        }
+        return result.data || [];
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
+export const getJobInterviews = async (jobId) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/interviews/job/${jobId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            throw new Error(result.message || 'Failed to fetch job interviews');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
+export const getAdminCalendarData = async () => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/calendar/data/admin`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            throw new Error(result.message || 'Failed to fetch admin calendar data');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
 export const getJobCandidates = async (id) => {
     try {
         const token = localStorage.getItem('token');
@@ -366,6 +446,38 @@ export const updateApplicationStatus = async (id, data) => {
         throw error;
     }
 };
+
+// [DEV] Force Gemini re-analysis — clears cache and re-runs evaluation
+export const reanalyzeApplication = async (id) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/applications/${id}/reanalyze`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Re-analysis failed');
+    }
+    return await response.json();
+};
+
+export const submitInterviewReview = async (interviewId, payload) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/interviews/${interviewId}/review-feedback`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(result.message || 'Failed to submit interview review');
+    }
+    return result;
+};
+
 
 export const checkJobMatch = async (jobId) => {
     try {

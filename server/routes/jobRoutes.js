@@ -7,7 +7,9 @@ import {
     deleteJob,
     getJobCandidates,
     applyJob,
-    checkJobMatch
+    checkJobMatch,
+    getMappedRecruiters,
+    retrySchedulingForCompanyAdmin
 } from '../controllers/jobController.js';
 import { protect, authorize } from '../middleware/auth.js';
 
@@ -30,5 +32,11 @@ router.route('/:id/apply')
 
 router.route('/:id/check-match')
     .get(protect, authorize('candidate'), checkJobMatch);
+
+router.route('/:id/mapped-recruiters')
+    .get(protect, authorize('company_admin'), getMappedRecruiters);
+
+router.route('/retry-scheduling')
+    .post(protect, authorize('company_admin'), retrySchedulingForCompanyAdmin);
 
 export default router;

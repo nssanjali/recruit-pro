@@ -3,6 +3,44 @@ import User from '../models/User.js';
 import Application from '../models/Application.js';
 import { ObjectId } from 'mongodb';
 import { parseResume, calculateMatchScore } from '../utils/resumeMatcher.js';
+import { bulkScheduleInterviews } from '../services/interviewSchedulingService.js';
+
+/** Remove fields that must never reach candidates or the public */
+const stripAdminFields = (job) => {
+    if (!job) return job;
+    const { applicationCutoffDate, requiredApplications, ...safe } = job;
+    return safe;
+};
+
+const normalizeApplicationStatus = (status) => {
+    const value = String(status || 'pending').toLowerCase().trim();
+    if (value === 'sortlisted' || value === 'interview_scheduled') return 'shortlisted';
+    return value;
+};
+
+/** Add company branding fields from the posting company admin */
+const enrichJobWithCompanyMedia = async (job) => {
+    if (!job?.postedBy) return job;
+
+    const postedByUser = await User.findById(job.postedBy);
+    if (!postedByUser) return job;
+
+    if (postedByUser.companyInfo?.companyBanner) {
+        job.companyBanner = postedByUser.companyInfo.companyBanner;
+    }
+
+    // Company logo is sourced from the company admin avatar.
+    // Fallback to optional companyInfo.companyLogo if present in legacy data.
+    if (postedByUser.avatar || postedByUser.companyInfo?.companyLogo) {
+        job.companyLogo = postedByUser.avatar || postedByUser.companyInfo.companyLogo;
+    }
+
+    if (!job.company && postedByUser.companyInfo?.companyName) {
+        job.company = postedByUser.companyInfo.companyName;
+    }
+
+    return job;
+};
 
 // @desc    Get all jobs
 // @route   GET /api/jobs
@@ -61,10 +99,20 @@ export const getJobs = async (req, res) => {
         const jobs = await Job.find(query);
         console.log(`getJobs found ${jobs.length} jobs`);
 
+        // Add company branding/details for each job
+        const jobsWithBanners = await Promise.all(jobs.map(async (job) => {
+            return await enrichJobWithCompanyMedia(job);
+        }));
+
+        // Strip admin-only fields for candidates
+        const payload = req.user?.role === 'candidate'
+            ? jobsWithBanners.map(stripAdminFields)
+            : jobsWithBanners;
+
         res.status(200).json({
             success: true,
-            count: jobs.length,
-            data: jobs
+            count: payload.length,
+            data: payload
         });
     } catch (error) {
         console.error('Error in getJobs:', error);
@@ -87,9 +135,14 @@ export const getJob = async (req, res) => {
                 message: 'Job not found'
             });
         }
+
+        await enrichJobWithCompanyMedia(job);
+
+        // Public / candidate route — strip admin fields
+        const isAdmin = req.user && ['admin', 'company_admin', 'recruiter'].includes(req.user.role);
         res.status(200).json({
             success: true,
-            data: job
+            data: isAdmin ? job : stripAdminFields(job)
         });
     } catch (error) {
         res.status(500).json({
@@ -106,6 +159,14 @@ export const createJob = async (req, res) => {
     try {
         // Add user to req.body
         req.body.postedBy = req.user._id;
+
+        // Coerce admin fields
+        if (req.body.applicationCutoffDate) {
+            req.body.applicationCutoffDate = new Date(req.body.applicationCutoffDate);
+        }
+        if (req.body.requiredApplications) {
+            req.body.requiredApplications = parseInt(req.body.requiredApplications, 10);
+        }
 
         const job = await Job.create(req.body);
 
@@ -141,6 +202,16 @@ export const updateJob = async (req, res) => {
                 success: false,
                 message: 'Not authorized to update this job'
             });
+        }
+
+        // Coerce admin fields before update
+        if (req.body.applicationCutoffDate) {
+            req.body.applicationCutoffDate = new Date(req.body.applicationCutoffDate);
+        }
+        if (req.body.requiredApplications !== undefined) {
+            req.body.requiredApplications = req.body.requiredApplications
+                ? parseInt(req.body.requiredApplications, 10)
+                : null;
         }
 
         job = await Job.findByIdAndUpdate(req.params.id, req.body);
@@ -246,18 +317,35 @@ export const getJobCandidates = async (req, res) => {
 
             // Only calculate match scores for authorized roles
             if (includeMatchAnalysis) {
-                // PRIORITIZE DB TEXT (Avoids Cloudinary 401/404 issues on PDF fetch)
-                let resumeText = candidate.resumeText || application?.resumeText;
+                // Prefer persisted scoring fields from application record.
+                const storedScore = application?.finalScore
+                    ?? application?.matchScore
+                    ?? application?.aiAnalysis?.matchScore;
 
-                if (!resumeText && resumeUrl) {
-                    resumeText = await parseResume(resumeUrl);
-                }
+                if (Number.isFinite(Number(storedScore))) {
+                    matchScore = Number(storedScore);
+                    analysis = {
+                        ...(application?.aiAnalysis || {}),
+                        score: Number(storedScore),
+                        resumeScore: application?.resumeScore,
+                        profileScore: application?.profileScore,
+                        aiSummary: application?.aiSummary
+                    };
+                } else {
+                    // Fallback: recompute only when persisted score is unavailable.
+                    // PRIORITIZE DB TEXT (Avoids Cloudinary 401/404 issues on PDF fetch)
+                    let resumeText = candidate.resumeText || application?.resumeText;
 
-                if (resumeText) {
-                    // Result is an object { score, skillsScore, ... }
-                    const matchResult = calculateMatchScore(job.description + ' ' + (job.requirements || ''), resumeText);
-                    matchScore = matchResult.score; // Extract the numeric score
-                    analysis = matchResult;
+                    if (!resumeText && resumeUrl) {
+                        resumeText = await parseResume(resumeUrl);
+                    }
+
+                    if (resumeText) {
+                        // Result is an object { score, skillsScore, ... }
+                        const matchResult = calculateMatchScore(job.description + ' ' + (job.requirements || ''), resumeText);
+                        matchScore = matchResult.score; // Extract the numeric score
+                        analysis = matchResult;
+                    }
                 }
             }
 
@@ -268,9 +356,14 @@ export const getJobCandidates = async (req, res) => {
                 ...candidateData,
                 applicationId: appId, // Convert ObjectId to string for JSON
                 resume: resumeUrl, // Explicitly include the resume URL found
+                finalScore: includeMatchAnalysis ? (application?.finalScore ?? undefined) : undefined,
+                resumeScore: includeMatchAnalysis ? (application?.resumeScore ?? undefined) : undefined,
+                profileScore: includeMatchAnalysis ? (application?.profileScore ?? undefined) : undefined,
+                aiSummary: includeMatchAnalysis ? (application?.aiSummary ?? application?.aiAnalysis?.summary ?? undefined) : undefined,
                 matchScore: includeMatchAnalysis ? matchScore : undefined, // Only include if authorized
                 analysis: includeMatchAnalysis ? analysis : undefined,    // Only include if authorized
-                applicationStatus: application?.status // Include application status
+                applicationStatus: application?.status, // Raw status
+                applicationStatusNormalized: normalizeApplicationStatus(application?.status) // UI lane status
             };
         }));
 
@@ -327,6 +420,134 @@ export const checkJobMatch = async (req, res) => {
     } catch (error) {
         console.error('Error checking match:', error);
         res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
+
+// @desc    Retry scheduling for all jobs with remaining eligible candidates
+// @route   POST /api/jobs/retry-scheduling
+// @access  Private (Company Admin)
+export const retrySchedulingForCompanyAdmin = async (req, res) => {
+    try {
+        const companyAdminId = req.user._id;
+        const { getDb } = await import('../config/db.js');
+        const db = getDb();
+
+        const jobs = await Job.find({
+            postedBy: companyAdminId,
+            requiredApplications: { $gt: 0 }
+        });
+
+        if (!jobs.length) {
+            return res.status(200).json({
+                success: true,
+                message: 'No jobs found for scheduling retry',
+                data: {
+                    attemptedJobs: 0,
+                    retriedJobs: 0,
+                    totalScheduled: 0,
+                    totalFailed: 0,
+                    totalSkipped: 0,
+                    jobs: []
+                }
+            });
+        }
+
+        const results = [];
+        let totalScheduled = 0;
+        let totalFailed = 0;
+        let totalSkipped = 0;
+        let retriedJobs = 0;
+
+        for (const job of jobs) {
+            const eligibleCount = await db.collection('applications').countDocuments({
+                jobId: job._id,
+                status: { $in: ['shortlisted', 'reviewing', 'pending'] },
+                interviewScheduled: { $ne: true }
+            });
+
+            if (eligibleCount <= 0) {
+                continue;
+            }
+
+            retriedJobs += 1;
+
+            await Job.findByIdAndUpdate(job._id, {
+                schedulingStatus: 'in_progress',
+                schedulingError: null,
+                updatedAt: new Date()
+            });
+
+            try {
+                const outcome = await bulkScheduleInterviews(job._id);
+                const finalStatus = outcome.scheduled > 0 ? 'scheduled' : (outcome.failed > 0 ? 'failed' : 'pending');
+
+                await Job.findByIdAndUpdate(job._id, {
+                    schedulingStatus: finalStatus,
+                    schedulingResult: {
+                        scheduled: outcome.scheduled || 0,
+                        failed: outcome.failed || 0,
+                        skipped: outcome.skipped || 0,
+                        reasonCounts: outcome.reasonCounts || {},
+                        batchId: outcome.batchId,
+                        completedAt: new Date()
+                    },
+                    schedulingError: null,
+                    updatedAt: new Date()
+                });
+
+                totalScheduled += outcome.scheduled || 0;
+                totalFailed += outcome.failed || 0;
+                totalSkipped += outcome.skipped || 0;
+
+                results.push({
+                    jobId: job._id,
+                    jobTitle: job.title,
+                    eligibleCount,
+                    scheduled: outcome.scheduled || 0,
+                    failed: outcome.failed || 0,
+                    skipped: outcome.skipped || 0,
+                    batchId: outcome.batchId,
+                    reasonCounts: outcome.reasonCounts || {}
+                });
+            } catch (error) {
+                await Job.findByIdAndUpdate(job._id, {
+                    schedulingStatus: 'failed',
+                    schedulingError: error.message,
+                    updatedAt: new Date()
+                });
+
+                totalFailed += eligibleCount;
+
+                results.push({
+                    jobId: job._id,
+                    jobTitle: job.title,
+                    eligibleCount,
+                    scheduled: 0,
+                    failed: eligibleCount,
+                    skipped: 0,
+                    error: error.message
+                });
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: retriedJobs > 0 ? 'Scheduling retry completed' : 'No eligible candidates available for retry',
+            data: {
+                attemptedJobs: jobs.length,
+                retriedJobs,
+                totalScheduled,
+                totalFailed,
+                totalSkipped,
+                jobs: results
+            }
+        });
+    } catch (error) {
+        console.error('Error retrying scheduling:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to retry scheduling'
+        });
     }
 };
 
@@ -401,6 +622,53 @@ export const applyJob = async (req, res) => {
 
             console.log('  Application Data:', newApplicationData);
 
+            // Calculate AI analysis immediately upon application creation
+            if (req.user.resume && job.description) {
+                const { parseResume, calculateMatchScore } = await import('../utils/resumeMatcher.js');
+                try {
+                    console.log('🤖 Calculating AI analysis for new application...');
+                    let resumeText = req.user.resumeText;
+                    if (!resumeText && req.user.resume) {
+                        resumeText = await parseResume(req.user.resume);
+                    }
+
+                    if (resumeText) {
+                        const matchResult = calculateMatchScore(
+                            job.description + ' ' + (job.requirements || ''),
+                            resumeText
+                        );
+                        newApplicationData.matchScore = matchResult.resumeScore || matchResult.score;
+                        newApplicationData.aiAnalysis = {
+                            matchScore: matchResult.resumeScore || matchResult.score,
+                            summary: matchResult.summary,
+                            insights: {
+                                strengths: matchResult.strongMatches?.join(', ') || 'N/A',
+                                concerns: matchResult.missingKeywords?.join(', ') || 'None',
+                                experience: `Experience Score: ${matchResult.experienceScore}%`,
+                                skills: `Skills Coverage: ${matchResult.skillsScore}%`
+                            }
+                        };
+                        console.log('✅ AI analysis calculated:', newApplicationData.matchScore);
+                    } else {
+                        console.warn('⚠️  Could not parse resume, setting 0% analysis');
+                        newApplicationData.matchScore = 0;
+                        newApplicationData.aiAnalysis = {
+                            matchScore: 0,
+                            summary: 'Unable to analyze - resume file not accessible',
+                            insights: {
+                                strengths: 'N/A',
+                                concerns: 'Resume could not be retrieved from storage',
+                                experience: 'Experience Score: N/A',
+                                skills: 'Skills Coverage: N/A'
+                            }
+                        };
+                    }
+                } catch (aiError) {
+                    console.error('❌ Error calculating AI analysis:', aiError.message);
+                    // Continue without AI analysis
+                }
+            }
+
             const createdApp = await Application.create(newApplicationData);
             console.log('✅ Application created with ID:', createdApp._id);
         }
@@ -415,5 +683,84 @@ export const applyJob = async (req, res) => {
             success: false,
             message: 'Server Error: ' + error.message
         });
+    }
+};
+
+// @desc    Get recruiters mapped/matched to a specific job (by role scoring)
+// @route   GET /api/jobs/:id/mapped-recruiters
+// @access  Private (Company Admin)
+export const getMappedRecruiters = async (req, res) => {
+    try {
+        const { default: Recruiter } = await import('../models/Recruiter.js');
+        const { calculateRecruiterJobMatch } = await import('../services/recruiterMatchingService.js');
+
+        // Get the job
+        const job = await Job.findById(req.params.id);
+        if (!job) {
+            return res.status(404).json({ success: false, message: 'Job not found' });
+        }
+
+        // Only company admin who owns the job can see this
+        if (job.postedBy?.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
+        }
+
+        // Get all active recruiters under this company admin
+        const recruiters = await Recruiter.findWithUserDetails({
+            companyAdminId: req.user._id,
+            status: 'active'
+        });
+
+        if (recruiters.length === 0) {
+            return res.status(200).json({ success: true, count: 0, data: [] });
+        }
+
+        // Score each recruiter against this job
+        const scored = recruiters.map(recruiter => {
+            const matchScore = calculateRecruiterJobMatch(job, recruiter);
+
+            // Determine match tier
+            let matchTier;
+            if (matchScore >= 70) matchTier = 'strong';
+            else if (matchScore >= 45) matchTier = 'good';
+            else if (matchScore >= 20) matchTier = 'partial';
+            else matchTier = 'low';
+
+            // Which of this recruiter's roles matched the job title
+            const jobTitleLower = (job.title || '').toLowerCase();
+            const matchedRoles = (recruiter.roles || []).filter(role =>
+                jobTitleLower.split(' ').some(word =>
+                    word.length > 2 && role.toLowerCase().includes(word)
+                )
+            );
+
+            return {
+                _id: recruiter._id,
+                user: recruiter.user,
+                roles: recruiter.roles || [],
+                skills: recruiter.skills || [],
+                expertise: recruiter.expertise || [],
+                experience: recruiter.experience || '',
+                availability: recruiter.availability,
+                activeJobs: recruiter.activeJobs || [],
+                pendingInterviews: recruiter.pendingInterviews || 0,
+                matchScore,
+                matchTier,
+                matchedRoles  // highlighted roles subset
+            };
+        });
+
+        // Sort: strong matches first, then by score
+        scored.sort((a, b) => b.matchScore - a.matchScore);
+
+        res.status(200).json({
+            success: true,
+            count: scored.length,
+            job: { _id: job._id, title: job.title, department: job.department },
+            data: scored
+        });
+    } catch (error) {
+        console.error('Error fetching mapped recruiters:', error);
+        res.status(500).json({ success: false, message: 'Server Error: ' + error.message });
     }
 };

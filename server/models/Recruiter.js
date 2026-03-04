@@ -16,12 +16,32 @@ class Recruiter {
             skills: recruiterData.skills || [],
             expertise: recruiterData.expertise || [],
             experience: recruiterData.experience || '',
+            // Role mapping — job role types this recruiter handles
+            roles: recruiterData.roles || [],
             availability: recruiterData.availability || 'available', // available, busy, unavailable
             // Company association
             companyId: recruiterData.companyId,
             companyAdminId: recruiterData.companyAdminId,
             // Status
-            status: recruiterData.status || 'active' // active, inactive
+            status: recruiterData.status || 'active', // active, inactive
+            // ── Interview Scheduling Constraints ──────────────────────────
+            workingHours: recruiterData.workingHours || {
+                monday: { start: '09:00', end: '18:00', enabled: true },
+                tuesday: { start: '09:00', end: '18:00', enabled: true },
+                wednesday: { start: '09:00', end: '18:00', enabled: true },
+                thursday: { start: '09:00', end: '18:00', enabled: true },
+                friday: { start: '09:00', end: '18:00', enabled: true },
+                saturday: { start: '09:00', end: '18:00', enabled: false },
+                sunday: { start: '09:00', end: '18:00', enabled: false }
+            },
+            maxInterviewsPerDay: recruiterData.maxInterviewsPerDay ?? 4,
+            interviewDuration: recruiterData.interviewDuration ?? 120, // minutes
+            bufferMinutes: recruiterData.bufferMinutes ?? 15,
+            leaveDates: recruiterData.leaveDates || [], // ['YYYY-MM-DD', ...]
+            timezone: recruiterData.timezone || 'Asia/Kolkata',
+            // Google Calendar OAuth tokens (stored per recruiter)
+            googleTokens: recruiterData.googleTokens || null
+            // { access_token, refresh_token, expiry_date, token_type, scope }
         };
 
         const result = await db.collection('recruiters').insertOne(recruiter);
@@ -98,6 +118,9 @@ class Recruiter {
 
         if (query.companyId && typeof query.companyId === 'string') {
             query.companyId = new ObjectId(query.companyId);
+        }
+        if (query.companyAdminId && typeof query.companyAdminId === 'string') {
+            query.companyAdminId = new ObjectId(query.companyAdminId);
         }
 
         const recruiters = await db.collection('recruiters').find(query).toArray();

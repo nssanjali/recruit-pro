@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getJob, applyJob, checkJobMatch, uploadFile, updateUserDetails } from '../lib/api';
-import { Card, Button, Badge, Input, Textarea } from './ui';
+import { getJob, applyJob, uploadFile, updateUserDetails } from '../lib/api';
+import { Card, Button, Badge, Input, Tabs, TabsList, TabsTrigger, TabsContent, Progress } from './ui';
 import {
     Briefcase, MapPin, Building, Clock, DollarSign, ArrowLeft,
-    CheckCircle2, AlertCircle, Sparkles, BrainCircuit, Upload,
-    FileText, Send, User, Mail, Phone, Loader
+    CheckCircle2, Upload, FileText, Send, Loader
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
@@ -20,6 +19,7 @@ export function JobDetails({ user }) {
     const [submitting, setSubmitting] = useState(false);
     const [applied, setApplied] = useState(false);
     const [uploadingResume, setUploadingResume] = useState(false);
+    const applicationFormRef = useRef(null);
 
     // Application form data
     const [formData, setFormData] = useState({
@@ -29,6 +29,7 @@ export function JobDetails({ user }) {
         resume: null,
         customResponses: {}
     });
+    const [formErrors, setFormErrors] = useState({});
 
     useEffect(() => {
         const fetchJob = async () => {
@@ -76,6 +77,11 @@ export function JobDetails({ user }) {
             toast.info('Uploading resume...');
             const url = await uploadFile(file, 'resume');
             setFormData(prev => ({ ...prev, resume: url }));
+            setFormErrors(prev => {
+                const next = { ...prev };
+                delete next.resume;
+                return next;
+            });
             await updateUserDetails({ resume: url });
             toast.success('Resume uploaded successfully!');
         } catch (error) {
@@ -88,7 +94,15 @@ export function JobDetails({ user }) {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const nextValue = name === 'phone' ? value.replace(/\D/g, '') : value;
+        setFormData(prev => ({ ...prev, [name]: nextValue }));
+        if (formErrors[name]) {
+            setFormErrors(prev => {
+                const next = { ...prev };
+                delete next[name];
+                return next;
+            });
+        }
     };
 
     const handleCustomFieldChange = (fieldId, value) => {
@@ -99,43 +113,59 @@ export function JobDetails({ user }) {
                 [fieldId]: value
             }
         }));
+        if (formErrors[fieldId]) {
+            setFormErrors(prev => {
+                const next = { ...prev };
+                delete next[fieldId];
+                return next;
+            });
+        }
     };
 
     const validateForm = () => {
         const config = job.applicationFormConfig;
+        const nextErrors = {};
+        const mandatoryFields = Object.values(config?.mandatoryFields || {});
 
-        // Check mandatory fields
-        if (config?.mandatoryFields) {
-            for (const field of config.mandatoryFields) {
-                if (field.required) {
-                    if (field.id === 'resume' && !formData.resume) {
-                        toast.error('Resume is required');
-                        return false;
-                    }
-                    if (field.id === 'name' && !formData.name.trim()) {
-                        toast.error('Name is required');
-                        return false;
-                    }
-                    if (field.id === 'email' && !formData.email.trim()) {
-                        toast.error('Email is required');
-                        return false;
-                    }
-                    if (field.id === 'phone' && field.required && !formData.phone.trim()) {
-                        toast.error('Phone is required');
-                        return false;
-                    }
-                }
+        for (const field of mandatoryFields) {
+            if (!field?.required) continue;
+            if (field.id === 'resume' && !formData.resume) {
+                nextErrors.resume = 'Resume is required';
+            }
+            if (field.id === 'name' && !formData.name.trim()) {
+                nextErrors.name = 'Full name is required';
+            }
+            if (field.id === 'email' && !formData.email.trim()) {
+                nextErrors.email = 'Email is required';
+            }
+            if (field.id === 'phone' && !formData.phone.trim()) {
+                nextErrors.phone = 'Phone is required';
             }
         }
 
-        // Check custom fields
-        if (config?.customFields) {
-            for (const field of config.customFields) {
-                if (field.required && !formData.customResponses[field.id]) {
-                    toast.error(`${field.label} is required`);
-                    return false;
-                }
+        if (formData.email?.trim()) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(formData.email.trim())) {
+                nextErrors.email = 'Enter a valid email address';
             }
+        }
+        if (formData.phone?.trim() && !/^\d{7,15}$/.test(formData.phone.trim())) {
+            nextErrors.phone = 'Phone must be 7 to 15 digits';
+        }
+
+        for (const field of config?.customFields || []) {
+            if (!field?.required) continue;
+            const value = formData.customResponses[field.id];
+            const isMissing = value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0);
+            if (isMissing) {
+                nextErrors[field.id] = `${field.label} is required`;
+            }
+        }
+
+        setFormErrors(nextErrors);
+        if (Object.keys(nextErrors).length > 0) {
+            toast.error('Please fill all required fields');
+            return false;
         }
 
         return true;
@@ -163,27 +193,17 @@ export function JobDetails({ user }) {
         }
     };
 
-    const runMatchCheck = async () => {
-        try {
-            toast.info('Analyzing your resume...');
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            const data = await checkJobMatch(id);
-
-            if (data && (data.analysis || data.matchScore)) {
-                navigate(`/jobs/${id}/analysis`);
-            } else {
-                toast.error("Detailed analysis unavailable. Please try again.");
-            }
-        } catch (error) {
-            console.error("Match Check Error:", error);
-            toast.error(error.message || 'Failed to calculate match');
-        }
-    };
-
     const getMandatoryField = (fieldId) => {
-        return job?.applicationFormConfig?.mandatoryFields?.find(f => f.id === fieldId) ||
+        const mandatoryFields = Object.values(job?.applicationFormConfig?.mandatoryFields || {});
+        return mandatoryFields.find(f => f.id === fieldId) ||
             { id: fieldId, enabled: true, required: true };
     };
+
+    useEffect(() => {
+        if (showApplicationForm && applicationFormRef.current) {
+            applicationFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, [showApplicationForm]);
 
     if (loading) {
         return (
@@ -201,6 +221,23 @@ export function JobDetails({ user }) {
     const emailField = getMandatoryField('email');
     const phoneField = getMandatoryField('phone');
     const resumeField = getMandatoryField('resume');
+    const totalFormItems =
+        (nameField.enabled ? 1 : 0) +
+        (emailField.enabled ? 1 : 0) +
+        (phoneField.enabled ? 1 : 0) +
+        (resumeField.enabled ? 1 : 0) +
+        customFields.length;
+    const completedFormItems =
+        (nameField.enabled && formData.name?.trim() ? 1 : 0) +
+        (emailField.enabled && formData.email?.trim() ? 1 : 0) +
+        (phoneField.enabled && formData.phone?.trim() ? 1 : 0) +
+        (resumeField.enabled && formData.resume ? 1 : 0) +
+        customFields.reduce((count, field) => {
+            const value = formData.customResponses[field.id];
+            const filled = value !== undefined && value !== null && value !== '' && (!Array.isArray(value) || value.length > 0);
+            return count + (filled ? 1 : 0);
+        }, 0);
+    const formCompletion = totalFormItems > 0 ? Math.round((completedFormItems / totalFormItems) * 100) : 0;
 
     return (
         <div className="max-w-5xl mx-auto p-6 space-y-8 animate-in fade-in duration-500">
@@ -214,7 +251,23 @@ export function JobDetails({ user }) {
                 <div className="lg:col-span-2 space-y-8">
                     {/* Job Header */}
                     <div>
-                        <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-3">{job.title}</h1>
+                        <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 sm:p-6 mb-6">
+                            <div className="flex items-start gap-4">
+                                {job.companyLogo ? (
+                                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-sm shrink-0">
+                                        <img src={job.companyLogo} alt={`${job.company || 'Company'} Logo`} className="w-full h-full object-cover" />
+                                    </div>
+                                ) : (
+                                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border border-slate-200 bg-slate-100 text-slate-700 flex items-center justify-center font-black text-xl shrink-0">
+                                        {(job.company || 'C').split(' ').map((w) => w[0]).join('').slice(0, 2)}
+                                    </div>
+                                )}
+                                <div className="min-w-0">
+                                    <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight mb-2">{job.title}</h1>
+                                    <p className="text-sm font-semibold text-slate-600">{job.company || 'Company'}</p>
+                                </div>
+                            </div>
+                        </div>
                         <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500">
                             <span className="flex items-center gap-1"><Building className="w-4 h-4" /> {job.company}</span>
                             <span className="flex items-center gap-1"><MapPin className="w-4 h-4" /> {job.location}</span>
@@ -224,93 +277,133 @@ export function JobDetails({ user }) {
                     </div>
 
                     {/* Job Details */}
-                    <Card className="p-8 border-slate-200 shadow-lg">
-                        <h3 className="text-xl font-black text-slate-900 mb-4 flex items-center gap-2">
-                            <Briefcase className="w-5 h-5 text-blue-600" />
-                            About the Role
-                        </h3>
-                        <p className="text-slate-600 leading-relaxed whitespace-pre-line mb-6">{job.description}</p>
-
-                        <h3 className="text-xl font-black text-slate-900 mt-8 mb-4">Requirements</h3>
-                        <p className="text-slate-600 leading-relaxed whitespace-pre-line mb-6">{job.requirements}</p>
-
-                        {job.responsibilities && (
-                            <>
-                                <h3 className="text-xl font-black text-slate-900 mt-8 mb-4">Responsibilities</h3>
-                                <p className="text-slate-600 leading-relaxed whitespace-pre-line">{job.responsibilities}</p>
-                            </>
-                        )}
+                    <Card className="border-slate-200 shadow-lg overflow-hidden">
+                        <div className="p-6 sm:p-8 border-b border-slate-200 bg-slate-50">
+                            <h3 className="text-xl font-black text-slate-900 mb-1 flex items-center gap-2">
+                                <Briefcase className="w-5 h-5 text-blue-600" />
+                                Role Details
+                            </h3>
+                            <p className="text-sm text-slate-600">Switch sections to understand expectations quickly.</p>
+                            <div className="flex flex-wrap gap-2 mt-4">
+                                {job.experience && <Badge className="bg-white border-slate-200 text-slate-700">{job.experience} experience</Badge>}
+                                {job.openings && <Badge className="bg-white border-slate-200 text-slate-700">{job.openings} openings</Badge>}
+                                {job.workMode && <Badge className="bg-white border-slate-200 text-slate-700">{job.workMode}</Badge>}
+                            </div>
+                        </div>
+                        <div className="p-6 sm:p-8">
+                            <Tabs defaultValue="overview" className="w-full">
+                                <TabsList className="bg-slate-100 w-full sm:w-auto">
+                                    <TabsTrigger value="overview">Overview</TabsTrigger>
+                                    <TabsTrigger value="requirements">Requirements</TabsTrigger>
+                                    {job.responsibilities && <TabsTrigger value="responsibilities">Responsibilities</TabsTrigger>}
+                                </TabsList>
+                                <TabsContent value="overview" className="mt-5">
+                                    <p className="text-slate-700 leading-relaxed whitespace-pre-line">{job.description || 'No overview provided.'}</p>
+                                </TabsContent>
+                                <TabsContent value="requirements" className="mt-5">
+                                    <p className="text-slate-700 leading-relaxed whitespace-pre-line">{job.requirements || 'No requirements provided.'}</p>
+                                </TabsContent>
+                                {job.responsibilities && (
+                                    <TabsContent value="responsibilities" className="mt-5">
+                                        <p className="text-slate-700 leading-relaxed whitespace-pre-line">{job.responsibilities}</p>
+                                    </TabsContent>
+                                )}
+                            </Tabs>
+                        </div>
                     </Card>
 
                     {/* Application Form */}
                     <AnimatePresence>
                         {showApplicationForm && !applied && (
                             <motion.div
+                                ref={applicationFormRef}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -20 }}
                             >
-                                <Card className="p-8 border-blue-200 shadow-xl bg-gradient-to-br from-white to-blue-50">
-                                    <h3 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-2">
-                                        <Send className="w-6 h-6 text-blue-600" />
-                                        Application Form
-                                    </h3>
-
-                                    <div className="space-y-6">
-                                        {/* Mandatory Fields */}
-                                        {nameField.enabled && (
-                                            <div className="space-y-2">
-                                                <label className="text-sm font-bold text-slate-700">
-                                                    Full Name {nameField.required && <span className="text-red-500">*</span>}
-                                                </label>
-                                                <Input
-                                                    name="name"
-                                                    value={formData.name}
-                                                    onChange={handleInputChange}
-                                                    placeholder="John Doe"
-                                                    required={nameField.required}
-                                                />
+                                <Card className="border-slate-200 shadow-xl overflow-hidden">
+                                    <div className="p-6 sm:p-8 border-b border-slate-200 bg-slate-50">
+                                        <h3 className="text-2xl font-black text-slate-900 mb-2 flex items-center gap-2">
+                                            <Send className="w-6 h-6 text-blue-600" />
+                                            Apply for This Job
+                                        </h3>
+                                        <p className="text-sm text-slate-600">
+                                            Complete the required details marked with <span className="text-red-500">*</span>.
+                                        </p>
+                                        <div className="mt-4 space-y-2">
+                                            <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                                                <span>Application completion</span>
+                                                <span>{completedFormItems}/{totalFormItems} fields</span>
                                             </div>
-                                        )}
+                                            <Progress value={formCompletion} className="h-2 bg-slate-200" />
+                                        </div>
+                                    </div>
 
-                                        {emailField.enabled && (
-                                            <div className="space-y-2">
-                                                <label className="text-sm font-bold text-slate-700">
-                                                    Email {emailField.required && <span className="text-red-500">*</span>}
-                                                </label>
-                                                <Input
-                                                    type="email"
-                                                    name="email"
-                                                    value={formData.email}
-                                                    onChange={handleInputChange}
-                                                    placeholder="john@example.com"
-                                                    required={emailField.required}
-                                                />
-                                            </div>
-                                        )}
+                                    <div className="p-6 sm:p-8 space-y-6 bg-white">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {nameField.enabled && (
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-bold text-slate-700">
+                                                        Full Name {nameField.required && <span className="text-red-500">*</span>}
+                                                    </label>
+                                                    <Input
+                                                        name="name"
+                                                        value={formData.name}
+                                                        onChange={handleInputChange}
+                                                        placeholder="John Doe"
+                                                        required={nameField.required}
+                                                        className={formErrors.name ? 'border-red-300 focus-visible:ring-red-400' : ''}
+                                                    />
+                                                    {formErrors.name && <p className="text-xs text-red-600">{formErrors.name}</p>}
+                                                </div>
+                                            )}
 
-                                        {phoneField.enabled && (
-                                            <div className="space-y-2">
-                                                <label className="text-sm font-bold text-slate-700">
-                                                    Phone {phoneField.required && <span className="text-red-500">*</span>}
-                                                </label>
-                                                <Input
-                                                    type="tel"
-                                                    name="phone"
-                                                    value={formData.phone}
-                                                    onChange={handleInputChange}
-                                                    placeholder="+1 (555) 123-4567"
-                                                    required={phoneField.required}
-                                                />
-                                            </div>
-                                        )}
+                                            {emailField.enabled && (
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-bold text-slate-700">
+                                                        Email {emailField.required && <span className="text-red-500">*</span>}
+                                                    </label>
+                                                    <Input
+                                                        type="email"
+                                                        name="email"
+                                                        value={formData.email}
+                                                        onChange={handleInputChange}
+                                                        placeholder="john@example.com"
+                                                        required={emailField.required}
+                                                        className={formErrors.email ? 'border-red-300 focus-visible:ring-red-400' : ''}
+                                                    />
+                                                    {formErrors.email && <p className="text-xs text-red-600">{formErrors.email}</p>}
+                                                </div>
+                                            )}
+
+                                            {phoneField.enabled && (
+                                                <div className="space-y-2 md:col-span-2">
+                                                    <label className="text-sm font-bold text-slate-700">
+                                                        Phone {phoneField.required && <span className="text-red-500">*</span>}
+                                                    </label>
+                                                    <Input
+                                                        type="tel"
+                                                        name="phone"
+                                                        value={formData.phone}
+                                                        onChange={handleInputChange}
+                                                        placeholder="+1 (555) 123-4567"
+                                                        required={phoneField.required}
+                                                        inputMode="numeric"
+                                                        pattern="[0-9]{7,15}"
+                                                        maxLength={15}
+                                                        className={formErrors.phone ? 'border-red-300 focus-visible:ring-red-400' : ''}
+                                                    />
+                                                    {formErrors.phone && <p className="text-xs text-red-600">{formErrors.phone}</p>}
+                                                </div>
+                                            )}
+                                        </div>
 
                                         {resumeField.enabled && (
-                                            <div className="space-y-2">
+                                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
                                                 <label className="text-sm font-bold text-slate-700">
                                                     Resume {resumeField.required && <span className="text-red-500">*</span>}
                                                 </label>
-                                                <div className="flex items-center gap-3">
+                                                <div className="flex flex-wrap items-center gap-3">
                                                     <input
                                                         type="file"
                                                         id="application-resume-upload"
@@ -323,7 +416,7 @@ export function JobDetails({ user }) {
                                                         variant="outline"
                                                         onClick={() => document.getElementById('application-resume-upload').click()}
                                                         disabled={uploadingResume}
-                                                        className="flex-1"
+                                                        className="border-slate-300 hover:bg-white"
                                                     >
                                                         {uploadingResume ? (
                                                             <>
@@ -342,36 +435,46 @@ export function JobDetails({ user }) {
                                                             href={formData.resume}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                                                            className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1"
                                                         >
                                                             <FileText className="w-4 h-4" />
-                                                            View
+                                                            View uploaded resume
                                                         </a>
                                                     )}
                                                 </div>
+                                                {formErrors.resume && <p className="text-xs text-red-600">{formErrors.resume}</p>}
                                             </div>
                                         )}
 
-                                        {/* Custom Fields */}
-                                        {customFields.map((field, index) => (
-                                            <div key={field.id || index} className="space-y-2">
-                                                <label className="text-sm font-bold text-slate-700">
-                                                    {field.label} {field.required && <span className="text-red-500">*</span>}
-                                                </label>
-                                                <DynamicFormField
-                                                    field={field}
-                                                    value={formData.customResponses[field.id] || ''}
-                                                    onChange={(_fieldId, value) => handleCustomFieldChange(field.id, value)}
-                                                />
+                                        {customFields.length > 0 && (
+                                            <div className="space-y-4">
+                                                <h4 className="text-sm font-bold uppercase tracking-wider text-slate-500">Additional Questions</h4>
+                                                {customFields.map((field, index) => (
+                                                    <div key={field.id || index}>
+                                                        <DynamicFormField
+                                                            field={field}
+                                                            value={formData.customResponses[field.id] || ''}
+                                                            onChange={(_fieldId, value) => handleCustomFieldChange(field.id, value)}
+                                                            error={formErrors[field.id]}
+                                                        />
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
+                                        )}
 
-                                        {/* Submit Buttons */}
-                                        <div className="flex gap-3 pt-4">
+                                        <div className="pt-2 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => setShowApplicationForm(false)}
+                                                disabled={submitting}
+                                                className="h-11 border-slate-300"
+                                            >
+                                                Cancel
+                                            </Button>
                                             <Button
                                                 onClick={handleSubmitApplication}
                                                 disabled={submitting}
-                                                className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold h-12"
+                                                className="h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold min-w-[190px]"
                                             >
                                                 {submitting ? (
                                                     <>
@@ -385,13 +488,6 @@ export function JobDetails({ user }) {
                                                     </>
                                                 )}
                                             </Button>
-                                            <Button
-                                                variant="outline"
-                                                onClick={() => setShowApplicationForm(false)}
-                                                disabled={submitting}
-                                            >
-                                                Cancel
-                                            </Button>
                                         </div>
                                     </div>
                                 </Card>
@@ -403,11 +499,11 @@ export function JobDetails({ user }) {
                 {/* Sidebar */}
                 <div className="space-y-6">
                     <Card className="p-6 border-slate-200 shadow-lg bg-white sticky top-6">
-                        <div className="mb-6">
-                            <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Salary Range</p>
+                        <div className="mb-5 pb-5 border-b border-slate-100">
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Compensation</p>
                             <p className="text-2xl font-black text-slate-900 flex items-center gap-1">
                                 <DollarSign className="w-5 h-5 text-emerald-500" />
-                                {job.salary}
+                                {job.salary || 'Not specified'}
                             </p>
                         </div>
 
@@ -419,40 +515,40 @@ export function JobDetails({ user }) {
                                 </div>
                             ) : (
                                 <Button
-                                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold h-12 rounded-xl text-lg shadow-lg"
-                                    onClick={() => setShowApplicationForm(true)}
+                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 rounded-xl shadow-sm"
+                                    onClick={() => {
+                                        setShowApplicationForm(true);
+                                        if (applicationFormRef.current) {
+                                            applicationFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                        }
+                                    }}
                                 >
-                                    Apply Now
+                                    {showApplicationForm ? 'Continue Application' : 'Start Application'}
                                 </Button>
                             )}
 
-                            {formData.resume && !applied && (
-                                <Button
-                                    variant="outline"
-                                    className="w-full h-11 border-2 border-purple-200 hover:border-purple-400 hover:bg-purple-50 font-bold"
-                                    onClick={runMatchCheck}
-                                >
-                                    <Sparkles className="w-4 h-4 mr-2 text-purple-600" />
-                                    Check Resume Fit
-                                </Button>
-                            )}
                         </div>
 
                         {/* Job Info */}
                         <div className="mt-6 pt-6 border-t border-slate-100 space-y-3 text-sm">
-                            <div className="flex justify-between">
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Quick Facts</p>
+                            <div className="flex justify-between gap-3">
                                 <span className="text-slate-500">Experience</span>
                                 <span className="font-bold text-slate-900">{job.experience}</span>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between gap-3">
                                 <span className="text-slate-500">Openings</span>
                                 <span className="font-bold text-slate-900">{job.openings}</span>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between gap-3">
                                 <span className="text-slate-500">Posted</span>
                                 <span className="font-bold text-slate-900">
                                     {new Date(job.createdAt).toLocaleDateString()}
                                 </span>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                                <span className="text-slate-500">Company</span>
+                                <span className="font-bold text-slate-900">{job.company}</span>
                             </div>
                         </div>
                     </Card>

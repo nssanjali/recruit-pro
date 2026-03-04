@@ -60,11 +60,19 @@ router.post('/resume', protect, uploadWithErrorHandling(upload.single('resume'))
             });
         }
 
+        // Log the file details for debugging
+        console.log('✅ Resume uploaded successfully');
+        console.log('  URL:', req.file.path);
+        console.log('  Public ID:', req.file.filename);
+        console.log('  Original name:', req.file.originalname);
+
         res.status(200).json({
             success: true,
             data: {
                 url: req.file.path,
-                name: req.file.originalname
+                name: req.file.originalname,
+                filename: req.file.filename,
+                format: req.file.format
             }
         });
     } catch (error) {
@@ -98,6 +106,32 @@ router.post('/avatar', protect, uploadWithErrorHandling(upload.single('avatar'))
         res.status(500).json({
             success: false,
             message: error.message || 'Error uploading avatar'
+        });
+    }
+});
+
+// Specific upload route for company banners
+router.post('/banner', protect, uploadWithErrorHandling(upload.single('banner')), (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: 'No banner uploaded'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: {
+                url: req.file.path,
+                name: req.file.originalname
+            }
+        });
+    } catch (error) {
+        console.error('Banner upload error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Error uploading banner'
         });
     }
 });

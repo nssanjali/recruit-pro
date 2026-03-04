@@ -39,6 +39,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { getJobs } from '../lib/api';
 import { getUsers, getUsersByRole, getUserStats } from '../lib/userApi';
 import { getApplications, approveApplication, rejectApplication } from '../lib/applicationApi';
+import { getApplicationStatusLabel, normalizeApplicationStatus } from '../lib/applicationStatus';
 
 export function AdminDashboard() {
   const [jobs, setJobs] = useState([]);
@@ -236,7 +237,7 @@ export function AdminDashboard() {
                   <p className="text-sm text-slate-500 font-medium mt-0.5">Approve or reject candidate applications</p>
                 </div>
                 <Badge className="bg-amber-100 text-amber-700 border-amber-200 font-bold">
-                  {applications.filter(a => a.status === 'pending').length} Pending
+                  {applications.filter(a => normalizeApplicationStatus(a.status) === 'pending').length} Pending
                 </Badge>
               </div>
 
@@ -244,6 +245,7 @@ export function AdminDashboard() {
                 <div className="space-y-3">
                   {applications.map((app, index) => {
                     const job = jobs.find(j => j._id === app.jobId);
+                    const appStatus = normalizeApplicationStatus(app.status);
                     return (
                       <motion.div
                         key={app._id}
@@ -261,13 +263,13 @@ export function AdminDashboard() {
                                 <div className="flex items-center gap-3 mb-2">
                                   <h4 className="font-bold text-slate-900">{app.candidateName || 'Candidate'}</h4>
                                   <Badge
-                                    className={`uppercase tracking-widest text-[9px] font-black ${app.status === 'approved' ? 'bg-green-100 text-green-700 border-green-200' :
-                                      app.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-200' :
-                                        app.status === 'interview_scheduled' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                    className={`uppercase tracking-widest text-[9px] font-black ${appStatus === 'approved' ? 'bg-green-100 text-green-700 border-green-200' :
+                                      appStatus === 'rejected' ? 'bg-red-100 text-red-700 border-red-200' :
+                                        appStatus === 'shortlisted' ? 'bg-blue-100 text-blue-700 border-blue-200' :
                                           'bg-yellow-100 text-yellow-700 border-yellow-200'
                                       }`}
                                   >
-                                    {app.status}
+                                    {getApplicationStatusLabel(app.status)}
                                   </Badge>
                                 </div>
                                 <div className="space-y-1 text-sm text-slate-600">
@@ -286,7 +288,7 @@ export function AdminDashboard() {
                               </div>
                             </div>
                             <div className="flex items-center gap-2 ml-4">
-                              {app.status === 'pending' && (
+                              {appStatus === 'pending' && (
                                 <>
                                   <Button
                                     onClick={async () => {
@@ -323,17 +325,17 @@ export function AdminDashboard() {
                                   </Button>
                                 </>
                               )}
-                              {app.status === 'approved' && (
+                              {appStatus === 'approved' && (
                                 <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 font-bold">
                                   ✓ Approved
                                 </Badge>
                               )}
-                              {app.status === 'interview_scheduled' && (
+                              {appStatus === 'shortlisted' && (
                                 <Badge className="bg-blue-100 text-blue-700 border-blue-200 font-bold">
-                                  📅 Interview Scheduled
+                                  ✓ Shortlisted
                                 </Badge>
                               )}
-                              {app.status === 'rejected' && (
+                              {appStatus === 'rejected' && (
                                 <Badge className="bg-red-100 text-red-700 border-red-200 font-bold">
                                   ✗ Rejected
                                 </Badge>
@@ -475,7 +477,7 @@ export function AdminDashboard() {
                   <h4 className="font-bold text-slate-900 mb-4">Application Status</h4>
                   <div className="space-y-3">
                     {['pending', 'reviewing', 'shortlisted', 'rejected', 'accepted'].map(status => {
-                      const count = applications.filter(app => app.status === status).length;
+                      const count = applications.filter(app => normalizeApplicationStatus(app.status) === status).length;
                       const percentage = applications.length > 0 ? (count / applications.length * 100).toFixed(0) : 0;
                       return (
                         <div key={status} className="space-y-2">

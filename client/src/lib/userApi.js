@@ -51,3 +51,46 @@ export const getUserStats = async () => {
         throw error;
     }
 };
+
+export const updateUserRole = async (id, role) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/users/${id}/role`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ role })
+        });
+        if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            throw new Error(result.message || 'Failed to update user role');
+        }
+        const result = await response.json();
+        return result.data;
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
+export const removeUser = async (id) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/users/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            throw new Error(result.message || 'Failed to delete user');
+        }
+        return true;
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};

@@ -8,12 +8,13 @@ import bcrypt from 'bcryptjs';
 // @access  Private (Company Admin only)
 export const getRecruiters = async (req, res) => {
     try {
+        const isSuperAdmin = req.user.role === 'super_admin';
         const companyAdminId = req.user._id;
 
-        // Get recruiters with user details
-        const recruiters = await Recruiter.findWithUserDetails({
-            companyAdminId: companyAdminId
-        });
+        // Super admin sees all recruiters. Company admin sees only their own.
+        const recruiters = await Recruiter.findWithUserDetails(
+            isSuperAdmin ? {} : { companyAdminId }
+        );
 
         res.status(200).json({
             success: true,
@@ -81,7 +82,7 @@ export const getRecruiter = async (req, res) => {
 // @access  Private (Company Admin only)
 export const createRecruiter = async (req, res) => {
     try {
-        const { name, email, password, phone, skills, expertise, experience } = req.body;
+        const { name, email, password, phone, skills, expertise, experience, roles } = req.body;
         const companyAdminId = req.user._id;
 
         // Validate required fields
@@ -123,10 +124,11 @@ export const createRecruiter = async (req, res) => {
         const recruiterData = {
             userId: user._id,
             companyAdminId: companyAdminId,
-            companyId: req.user.companyId || companyAdminId, // Use company ID if available
+            companyId: req.user.companyId || companyAdminId,
             skills: skills || [],
             expertise: expertise || [],
             experience: experience || '',
+            roles: roles || [],
             status: 'active'
         };
 
@@ -168,14 +170,14 @@ export const updateRecruiter = async (req, res) => {
         }
 
         // Check authorization
-        if (recruiter.companyAdminId.toString() !== req.user._id.toString()) {
+        if (req.user.role !== 'super_admin' && recruiter.companyAdminId.toString() !== req.user._id.toString()) {
             return res.status(403).json({
                 success: false,
                 message: 'Not authorized to update this recruiter'
             });
         }
 
-        const { name, email, phone, skills, expertise, experience, status } = req.body;
+        const { name, email, phone, skills, expertise, experience, status, roles } = req.body;
 
         // Update recruiter profile
         const recruiterUpdateData = {};
@@ -183,6 +185,7 @@ export const updateRecruiter = async (req, res) => {
         if (expertise !== undefined) recruiterUpdateData.expertise = expertise;
         if (experience !== undefined) recruiterUpdateData.experience = experience;
         if (status !== undefined) recruiterUpdateData.status = status;
+        if (roles !== undefined) recruiterUpdateData.roles = roles;
 
         const updatedRecruiter = await Recruiter.findByIdAndUpdate(
             req.params.id,
@@ -239,7 +242,7 @@ export const deleteRecruiter = async (req, res) => {
         }
 
         // Check authorization
-        if (recruiter.companyAdminId.toString() !== req.user._id.toString()) {
+        if (req.user.role !== 'super_admin' && recruiter.companyAdminId.toString() !== req.user._id.toString()) {
             return res.status(403).json({
                 success: false,
                 message: 'Not authorized to delete this recruiter'
@@ -315,13 +318,14 @@ export const updateMyProfile = async (req, res) => {
             });
         }
 
-        const { skills, expertise, experience, availability } = req.body;
+        const { skills, expertise, experience, availability, roles } = req.body;
 
         const updateData = {};
         if (skills !== undefined) updateData.skills = skills;
         if (expertise !== undefined) updateData.expertise = expertise;
         if (experience !== undefined) updateData.experience = experience;
         if (availability !== undefined) updateData.availability = availability;
+        if (roles !== undefined) updateData.roles = roles;
 
         const updatedRecruiter = await Recruiter.findByIdAndUpdate(
             recruiter._id,

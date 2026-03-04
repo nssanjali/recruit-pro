@@ -1,9 +1,69 @@
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Badge } from './ui';
-import { Save, Award, Briefcase, TrendingUp, User } from 'lucide-react';
+import { Save, Award, Briefcase, TrendingUp, User, Tag, X, Plus } from 'lucide-react';
 import { getMyRecruiterProfile, updateMyRecruiterProfile } from '../lib/recruiterApi';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
+
+const SUGGESTED_ROLES = [
+    'Software Engineer', 'Frontend Developer', 'Backend Developer', 'Full Stack Developer',
+    'DevOps Engineer', 'Data Scientist', 'Data Engineer', 'Machine Learning Engineer',
+    'Product Manager', 'UX Designer', 'QA Engineer', 'Mobile Developer',
+    'Cloud Architect', 'Cybersecurity Engineer', 'Business Analyst', 'Project Manager',
+    'Technical Lead', 'Engineering Manager', 'Scrum Master',
+];
+
+function RolePicker({ selectedRoles, onChange }) {
+    const [customInput, setCustomInput] = useState('');
+
+    const toggleRole = (role) => {
+        if (selectedRoles.includes(role)) onChange(selectedRoles.filter(r => r !== role));
+        else onChange([...selectedRoles, role]);
+    };
+
+    const addCustom = () => {
+        const trimmed = customInput.trim();
+        if (trimmed && !selectedRoles.includes(trimmed)) onChange([...selectedRoles, trimmed]);
+        setCustomInput('');
+    };
+
+    return (
+        <div className="space-y-3">
+            {selectedRoles.length > 0 && (
+                <div className="flex flex-wrap gap-2 p-3 bg-teal-50 border border-teal-200 rounded-xl min-h-[44px]">
+                    {selectedRoles.map(role => (
+                        <span key={role}
+                            className="inline-flex items-center gap-1 px-3 py-1 bg-teal-600 text-white text-xs font-bold rounded-full">
+                            {role}
+                            <button type="button" onClick={() => onChange(selectedRoles.filter(r => r !== role))}
+                                className="hover:bg-teal-700 rounded-full p-0.5 ml-0.5">
+                                <X className="w-3 h-3" />
+                            </button>
+                        </span>
+                    ))}
+                </div>
+            )}
+            <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
+                {SUGGESTED_ROLES.filter(r => !selectedRoles.includes(r)).map(role => (
+                    <button key={role} type="button" onClick={() => toggleRole(role)}
+                        className="px-2.5 py-1 text-xs font-bold rounded-full border border-slate-300 text-slate-600 hover:border-teal-400 hover:bg-teal-50 hover:text-teal-700 transition-colors">
+                        {role}
+                    </button>
+                ))}
+            </div>
+            <div className="flex gap-2">
+                <Input value={customInput} onChange={e => setCustomInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCustom())}
+                    placeholder="Add custom role..." className="border-slate-300 text-sm h-9" />
+                <Button type="button" onClick={addCustom} disabled={!customInput.trim()}
+                    className="h-9 px-3 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs">
+                    <Plus className="w-3.5 h-3.5" />
+                </Button>
+            </div>
+        </div>
+    );
+}
+
 
 export function RecruiterProfile({ user }) {
     const [profile, setProfile] = useState(null);
@@ -13,7 +73,8 @@ export function RecruiterProfile({ user }) {
         skills: '',
         expertise: '',
         experience: '',
-        availability: 'available'
+        availability: 'available',
+        roles: []
     });
 
     useEffect(() => {
@@ -30,7 +91,8 @@ export function RecruiterProfile({ user }) {
                     skills: response.data.skills?.join(', ') || '',
                     expertise: response.data.expertise?.join(', ') || '',
                     experience: response.data.experience || '',
-                    availability: response.data.availability || 'available'
+                    availability: response.data.availability || 'available',
+                    roles: response.data.roles || []
                 });
             }
         } catch (error) {
@@ -50,7 +112,8 @@ export function RecruiterProfile({ user }) {
                 skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean),
                 expertise: formData.expertise.split(',').map(e => e.trim()).filter(Boolean),
                 experience: formData.experience,
-                availability: formData.availability
+                availability: formData.availability,
+                roles: formData.roles
             };
 
             await updateMyRecruiterProfile(data);
@@ -145,6 +208,19 @@ export function RecruiterProfile({ user }) {
                                     <label className="text-sm font-bold text-slate-600">Email</label>
                                     <p className="text-slate-900 font-bold mt-1">{user?.email}</p>
                                 </div>
+                            </div>
+
+                            {/* Role Mapping */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                    <Tag className="w-4 h-4 text-teal-600" />
+                                    Role Mapping
+                                    <span className="ml-1 text-xs text-slate-500 font-normal">— job types you handle (used for AI assignment matching)</span>
+                                </label>
+                                <RolePicker
+                                    selectedRoles={formData.roles}
+                                    onChange={roles => setFormData({ ...formData, roles })}
+                                />
                             </div>
 
                             {/* Skills */}

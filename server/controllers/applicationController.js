@@ -89,6 +89,8 @@ export const getApplication = async (req, res) => {
         }
 
         console.log('✅ Application found:', application._id);
+        console.log('   candidateId:', application.candidateId, '| jobId:', application.jobId);
+        console.log('   alreadyEvaluated:', !!application.aiAnalysis);
 
         // Check authorization
         if (req.user.role === 'candidate' && application.candidateId.toString() !== req.user._id.toString()) {
@@ -98,53 +100,111 @@ export const getApplication = async (req, res) => {
             });
         }
 
-        // Populate candidate and job details
+        // Load candidate & job — coerce IDs to ObjectId to handle stored strings
+        console.log('📦 Loading candidate & job from DB...');
         const { getDb } = await import('../config/db.js');
+        const { ObjectId } = await import('mongodb');
         const db = getDb();
 
-        // Get candidate details
-        const candidate = await db.collection('users').findOne({
-            _id: application.candidateId
-        });
+        const toOid = (id) => {
+            if (!id) return null;
+            try { return id instanceof ObjectId ? id : new ObjectId(id.toString()); }
+            catch { return null; }
+        };
 
-        // Get job details
-        const job = await db.collection('jobs').findOne({
-            _id: application.jobId
-        });
+        const candidate = await db.collection('users').findOne({ _id: toOid(application.candidateId) });
+        console.log('   Candidate:', candidate ? candidate.name : '❌ not found');
 
-        // Calculate match score if not already present
-        let matchScore = application.matchScore || 0;
-        let aiAnalysis = application.aiAnalysis || null;
+        const job = await db.collection('jobs').findOne({ _id: toOid(application.jobId) });
+        console.log('   Job:', job ? job.title : '❌ not found');
 
-        if (candidate?.resume && job?.description) {
-            const { parseResume, calculateMatchScore } = await import('../utils/resumeMatcher.js');
+        const interviews = await db.collection('interviews')
+            .find({
+                $or: [
+                    { applicationId: application._id },
+                    { applicationId: application._id?.toString() }
+                ]
+            })
+            .sort({ scheduledAt: -1 })
+            .limit(1)
+            .toArray();
+        const latestInterview = interviews[0] || null;
 
-            // Use stored resume text if available, otherwise parse
-            let resumeText = candidate.resumeText || application.resumeText;
-            if (!resumeText && candidate.resume) {
-                resumeText = await parseResume(candidate.resume);
+        let companyBanner = null;
+        let companyLogo = null;
+        if (job && job.postedBy) {
+            const postedByUser = await db.collection('users').findOne({ _id: toOid(job.postedBy) });
+            if (postedByUser && postedByUser.companyInfo && postedByUser.companyInfo.companyBanner) {
+                companyBanner = postedByUser.companyInfo.companyBanner;
             }
-
-            if (resumeText) {
-                const matchResult = calculateMatchScore(
-                    job.description + ' ' + (job.requirements || ''),
-                    resumeText
-                );
-                matchScore = matchResult.score;
-                aiAnalysis = {
-                    matchScore: matchResult.score,
-                    summary: matchResult.summary,
-                    insights: {
-                        strengths: matchResult.strongMatches?.join(', ') || 'N/A',
-                        concerns: matchResult.missingKeywords?.join(', ') || 'None',
-                        experience: `Experience Score: ${matchResult.experienceScore}%`,
-                        skills: `Skills Coverage: ${matchResult.skillsScore}%`
-                    }
-                };
+            if (postedByUser && (postedByUser.avatar || postedByUser.companyInfo?.companyLogo)) {
+                companyLogo = postedByUser.avatar || postedByUser.companyInfo.companyLogo;
             }
         }
 
+        // ----------------------------------------------------------------
+        // AI Evaluation — use cached result from DB if already present,
+        // otherwise run full Gemini-powered evaluation.
+        // ----------------------------------------------------------------
+        let evalResult = null;
+        const alreadyEvaluated = !!application.aiAnalysis;
+
+        if (!alreadyEvaluated && candidate?.resume && job?.description) {
+            const { evaluateApplication } = await import('../utils/resumeMatcher.js');
+            const jdText = job.description + ' ' + (job.requirements || '');
+            const answers = application.formData || application.responses || {};
+
+            console.log('📋 ─────────── EVALUATION INPUT SUMMARY ───────────');
+            console.log(`   Job Title   : ${job.title}`);
+            console.log(`   JD length   : ${jdText.length} chars`);
+            console.log(`   JD preview  : ${jdText.substring(0, 120).replace(/\n/g, ' ')}...`);
+            console.log(`   Resume URL  : ${candidate.resume?.substring(0, 80)}...`);
+            console.log(`   Exp Years   : ${candidate.experienceYears || 0}`);
+            console.log(`   Skills      : ${(candidate.skills || []).join(', ') || '(none)'}`);
+            console.log(`   Projects    : ${(candidate.projects || []).length} projects`);
+            console.log(`   Form Answers: ${Object.keys(answers).length} fields → ${JSON.stringify(answers).substring(0, 150)}`);
+            console.log('📋 ──────────────────────────────────────────────────');
+
+            evalResult = await evaluateApplication({
+                resumeUrl: candidate.resume,
+                jobDescription: jdText,
+                experienceYears: candidate.experienceYears || 0,
+                skills: candidate.skills || [],
+                projects: candidate.projects || [],
+                answers
+            });
+
+            console.log(`✅ Evaluation complete — Final Score: ${evalResult.finalScore}%`);
+        } else {
+            console.log(`⏭️  Skipping evaluation: alreadyEvaluated=${alreadyEvaluated}, hasResume=${!!candidate?.resume}, hasJD=${!!job?.description}`);
+        }
+
+        // Build normalized values (prefer fresh eval, fall back to stored)
+        const matchScore = evalResult?.finalScore
+            ?? application.finalScore
+            ?? application.matchScore
+            ?? application.aiAnalysis?.matchScore
+            ?? 0;
+
+        const aiAnalysis = evalResult ? {
+            matchScore: evalResult.finalScore,
+            summary: evalResult.aiSummary,
+            strongMatches: evalResult.strongMatches || [],
+            missingKeywords: evalResult.missingKeywords || [],
+            insights: {
+                strengths: evalResult.aiStrengths?.join(', ') || 'N/A',
+                concerns: evalResult.aiWeaknesses?.join(', ') || 'None',
+                experience: `Experience Score: ${evalResult.experienceScore ?? 0}%`,
+                skills: `Skills Coverage: ${evalResult.skillsScore ?? 0}%`
+            }
+        } : (application.aiAnalysis || {
+            matchScore: 0,
+            summary: candidate?.resume ? 'Analysis pending' : 'No resume uploaded',
+            insights: { strengths: 'N/A', concerns: 'N/A', experience: 'N/A', skills: 'N/A' }
+        });
+
         // Build enriched response
+        console.log('🏗️  Building enriched response...');
         const enrichedApplication = {
             ...application,
             candidate: candidate ? {
@@ -159,10 +219,28 @@ export const getApplication = async (req, res) => {
                 title: job.title,
                 company: job.company,
                 department: job.department,
-                location: job.location
+                location: job.location,
+                companyBanner: companyBanner || job.companyBanner || null,
+                companyLogo: companyLogo || job.companyLogo || null
             } : null,
             matchScore,
             aiAnalysis,
+            // Flat fields exposed directly for easy frontend access
+            finalScore: evalResult?.finalScore ?? application.finalScore,
+            resumeScore: evalResult?.resumeScore ?? application.resumeScore,
+            profileScore: evalResult?.profileScore ?? application.profileScore,
+            aiSummary: evalResult?.aiSummary ?? application.aiSummary,
+            aiStrengths: evalResult?.aiStrengths ?? application.aiStrengths ?? [],
+            aiWeaknesses: evalResult?.aiWeaknesses ?? application.aiWeaknesses ?? [],
+            interview: latestInterview ? {
+                _id: latestInterview._id,
+                scheduledAt: latestInterview.scheduledAt,
+                endsAt: latestInterview.endsAt,
+                status: latestInterview.status,
+                meetingLink: latestInterview.meetingLink,
+                interviewReview: latestInterview.interviewReview || null,
+                aiInterviewAnalysis: latestInterview.aiInterviewAnalysis || null
+            } : null,
             // Map formData to responses with human-readable labels
             responses: resolveFormResponses(
                 application.formData || application.responses || {},
@@ -170,10 +248,40 @@ export const getApplication = async (req, res) => {
             )
         };
 
+        // Persist fresh evaluation to DB so subsequent loads are instant
+        if (evalResult && !alreadyEvaluated) {
+            try {
+                const { ObjectId } = await import('mongodb');
+                await db.collection('applications').updateOne(
+                    { _id: new ObjectId(req.params.id) },
+                    {
+                        $set: {
+                            // Legacy field (used by ApplicationReview fallback chain)
+                            matchScore,
+                            aiAnalysis,
+                            // New flat fields (primary fields read by ApplicationReview)
+                            finalScore: evalResult.finalScore,
+                            resumeScore: evalResult.resumeScore,
+                            profileScore: evalResult.profileScore,
+                            aiSummary: evalResult.aiSummary,
+                            aiStrengths: evalResult.aiStrengths,
+                            aiWeaknesses: evalResult.aiWeaknesses,
+                            evaluatedAt: evalResult.evaluatedAt
+                        }
+                    }
+                );
+                console.log('✅ Persisted Gemini AI analysis to database');
+            } catch (persistError) {
+                console.warn('⚠️  Could not persist AI analysis:', persistError.message);
+            }
+        }
+
+        console.log('📤 Sending response...');
         res.status(200).json({
             success: true,
             data: enrichedApplication
         });
+        console.log('✅ Response sent successfully');
     } catch (error) {
         console.error('Error fetching application:', error);
         res.status(500).json({
@@ -182,6 +290,109 @@ export const getApplication = async (req, res) => {
         });
     }
 };
+
+// @desc    Force re-run Gemini AI analysis (testing only)
+// @route   POST /api/applications/:id/reanalyze
+// @access  Private (Recruiter, Admin)
+export const reanalyzeApplication = async (req, res) => {
+    try {
+        console.log('\n🔄 ═══════════ FORCE RE-ANALYZE ═══════════');
+        console.log('   Application ID:', req.params.id);
+
+        const { getDb } = await import('../config/db.js');
+        const { ObjectId } = await import('mongodb');
+        const db = getDb();
+
+        const appOid = new ObjectId(req.params.id);
+
+        // Step 1: Clear cached analysis so evaluateApplication runs fresh
+        console.log('   🗑️  Clearing cached aiAnalysis from DB...');
+        await db.collection('applications').updateOne(
+            { _id: appOid },
+            {
+                $unset: {
+                    aiAnalysis: '', finalScore: '', resumeScore: '', profileScore: '',
+                    aiSummary: '', aiStrengths: '', aiWeaknesses: '', evaluatedAt: '', matchScore: ''
+                }
+            }
+        );
+
+        // Step 2: Load fresh application + candidate + job
+        const application = await db.collection('applications').findOne({ _id: appOid });
+        if (!application) return res.status(404).json({ success: false, message: 'Application not found' });
+
+        const toOid = (id) => {
+            try { return id instanceof ObjectId ? id : new ObjectId(id.toString()); }
+            catch { return null; }
+        };
+
+        const candidate = await db.collection('users').findOne({ _id: toOid(application.candidateId) });
+        const job = await db.collection('jobs').findOne({ _id: toOid(application.jobId) });
+
+        console.log('   Candidate:', candidate?.name || '❌ not found');
+        console.log('   Job      :', job?.title || '❌ not found');
+
+        if (!candidate?.resume || !job?.description) {
+            return res.status(400).json({
+                success: false,
+                message: `Cannot evaluate: ${!candidate?.resume ? 'no resume' : 'no job description'}`
+            });
+        }
+
+        // Step 3: Run full Gemini evaluation
+        const { evaluateApplication } = await import('../utils/resumeMatcher.js');
+        const evalResult = await evaluateApplication({
+            resumeUrl: candidate.resume,
+            jobDescription: job.description + ' ' + (job.requirements || ''),
+            experienceYears: candidate.experienceYears || 0,
+            skills: candidate.skills || [],
+            projects: candidate.projects || [],
+            answers: application.formData || application.responses || {}
+        });
+
+        console.log(`   ✅ Evaluation done — Final Score: ${evalResult.finalScore}%`);
+
+        // Step 4: Persist fresh result
+        await db.collection('applications').updateOne(
+            { _id: appOid },
+            {
+                $set: {
+                    matchScore: evalResult.finalScore,
+                    aiAnalysis: {
+                        matchScore: evalResult.finalScore,
+                        summary: evalResult.aiSummary,
+                        insights: {
+                            strengths: evalResult.aiStrengths?.join(', ') || 'N/A',
+                            concerns: evalResult.aiWeaknesses?.join(', ') || 'None',
+                            experience: `Experience Score: ${evalResult.experienceScore ?? 0}%`,
+                            skills: `Skills Coverage: ${evalResult.skillsScore ?? 0}%`
+                        }
+                    },
+                    finalScore: evalResult.finalScore,
+                    resumeScore: evalResult.resumeScore,
+                    profileScore: evalResult.profileScore,
+                    aiSummary: evalResult.aiSummary,
+                    aiStrengths: evalResult.aiStrengths,
+                    aiWeaknesses: evalResult.aiWeaknesses,
+                    evaluatedAt: evalResult.evaluatedAt
+                }
+            }
+        );
+
+        console.log('🔄 ══════════════════════════════════════════\n');
+
+        res.status(200).json({
+            success: true,
+            message: `Re-analysis complete — Score: ${evalResult.finalScore}%`,
+            data: evalResult
+        });
+
+    } catch (error) {
+        console.error('reanalyzeApplication error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 
 // @desc    Create new application
 // @route   POST /api/applications
@@ -395,6 +606,98 @@ export const deleteApplication = async (req, res) => {
 // @desc    Approve application and auto-schedule interview
 // @route   PUT /api/applications/:id/approve
 // @access  Private (Admin only)
+
+// @desc    Update application status
+// @route   PUT /api/applications/:id/status
+// @access  Private (Recruiter/Admin/Company Admin)
+export const updateApplicationStatus = async (req, res) => {
+    try {
+        const { status, reviewNotes } = req.body;
+
+        if (!status) {
+            return res.status(400).json({
+                success: false,
+                message: 'Status is required'
+            });
+        }
+
+        const normalizedStatus = String(status).toLowerCase().trim() === 'sortlisted'
+            ? 'shortlisted'
+            : String(status).toLowerCase().trim();
+
+        const validStatuses = ['pending', 'reviewing', 'shortlisted', 'rejected', 'accepted', 'interview_scheduled'];
+        if (!validStatuses.includes(normalizedStatus)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+            });
+        }
+
+        // Company admins can only update applications for jobs they own.
+        if (req.user.role === 'company_admin') {
+            const db = getDb();
+            const application = await Application.findById(req.params.id);
+            if (!application) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Application not found'
+                });
+            }
+
+            const jobId = typeof application.jobId === 'string' ? new ObjectId(application.jobId) : application.jobId;
+            const job = await db.collection('jobs').findOne({ _id: jobId });
+            if (!job) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Related job not found'
+                });
+            }
+
+            if (job.postedBy?.toString() !== req.user._id.toString()) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Not authorized to update this application'
+                });
+            }
+        }
+
+        const updateData = {
+            status: normalizedStatus,
+            reviewedBy: req.user._id,
+            reviewedAt: new Date()
+        };
+
+        if (reviewNotes !== undefined) {
+            updateData.reviewNotes = reviewNotes;
+        }
+
+        const application = await Application.findByIdAndUpdate(
+            req.params.id,
+            updateData,
+            { new: true }
+        );
+
+        if (!application) {
+            return res.status(404).json({
+                success: false,
+                message: 'Application not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Application status updated to ${normalizedStatus}`,
+            data: application
+        });
+    } catch (error) {
+        console.error('Error updating application status:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server Error'
+        });
+    }
+};
+
 export const approveApplication = async (req, res) => {
     try {
         const application = await Application.findById(req.params.id);

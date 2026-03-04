@@ -4,6 +4,10 @@ import { Badge } from './ui';
 
 export function DynamicFormField({ field, value, onChange, error, userResume }) {
     const [fileName, setFileName] = useState('');
+    const inputClassName = `w-full px-4 py-3 border rounded-xl text-sm bg-white transition-colors focus:outline-none focus:ring-2 ${error
+        ? 'border-red-300 focus:ring-red-400'
+        : 'border-slate-200 focus:ring-blue-500'
+        }`;
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
@@ -32,10 +36,17 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
                     <input
                         type={field.type === 'email' ? 'email' : field.type === 'tel' || field.type === 'phone' ? 'tel' : 'text'}
                         value={value || ''}
-                        onChange={(e) => onChange(field.id, e.target.value)}
+                        onChange={(e) => {
+                            const isPhoneField = field.type === 'tel' || field.type === 'phone';
+                            const nextValue = isPhoneField ? e.target.value.replace(/\D/g, '') : e.target.value;
+                            onChange(field.id, nextValue);
+                        }}
                         placeholder={placeholder}
                         required={field.required}
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        inputMode={field.type === 'tel' || field.type === 'phone' ? 'numeric' : undefined}
+                        pattern={field.type === 'tel' || field.type === 'phone' ? '[0-9]{7,15}' : undefined}
+                        maxLength={field.type === 'tel' || field.type === 'phone' ? 15 : undefined}
+                        className={inputClassName}
                     />
                 );
 
@@ -48,7 +59,7 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
                         placeholder={placeholder}
                         required={field.required}
                         rows={field.rows || field.config?.rows || 6}
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
+                        className={`${inputClassName} resize-none`}
                     />
                 );
 
@@ -62,7 +73,7 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
                         required={field.required}
                         min={field.min ?? field.config?.min}
                         max={field.max ?? field.config?.max}
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        className={inputClassName}
                     />
                 );
 
@@ -73,7 +84,7 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
                         value={value || ''}
                         onChange={(e) => onChange(field.id, e.target.value)}
                         required={field.required}
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        className={inputClassName}
                     />
                 );
 
@@ -84,7 +95,7 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
                         value={value || ''}
                         onChange={(e) => onChange(field.id, e.target.value)}
                         required={field.required}
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        className={inputClassName}
                     >
                         <option value="">{placeholder || 'Select an option...'}</option>
                         {options.map((option) => (
@@ -159,7 +170,7 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
                             </div>
                             <div className="text-center">
                                 <p className="text-xs text-slate-500 mb-2">Or upload a different resume</p>
-                                <label className="inline-flex items-center gap-2 px-4 py-2 border-2 border-dashed border-slate-300 rounded-xl hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition-colors">
+                                <label className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-xl hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition-colors">
                                     <Upload className="w-4 h-4 text-slate-600" />
                                     <span className="text-sm text-slate-600">Choose file</span>
                                     <input
@@ -179,7 +190,7 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
 
                 return (
                     <div>
-                        <label className="flex flex-col items-center gap-3 p-6 border-2 border-dashed border-slate-300 rounded-xl hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition-colors">
+                        <label className={`flex flex-col items-center gap-3 p-6 rounded-xl cursor-pointer transition-colors border ${error ? 'border-red-300 bg-red-50/40' : 'border-slate-300 hover:border-blue-400 hover:bg-blue-50'}`}>
                             <Upload className="w-8 h-8 text-slate-400" />
                             <div className="text-center">
                                 <p className="text-sm font-medium text-slate-700">
@@ -208,7 +219,7 @@ export function DynamicFormField({ field, value, onChange, error, userResume }) 
                         onChange={(e) => onChange(field.id, e.target.value)}
                         placeholder={field.placeholder || ''}
                         required={field.required}
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        className={inputClassName}
                     />
                 );
         }

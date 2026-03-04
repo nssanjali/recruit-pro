@@ -14,7 +14,10 @@ import {
     Send,
     ArrowLeft,
     CheckCircle2,
-    Loader
+    Loader,
+    Lock,
+    Clock,
+    Hash
 } from 'lucide-react';
 import {
     Card,
@@ -27,7 +30,7 @@ import {
     Badge
 } from './ui';
 import { JobFormBuilderPlayground } from './JobFormBuilderPlayground';
-import { createJob, getJobById, updateJob } from '../lib/api';
+import { createJob, getJobById, updateJob, getCurrentUser } from '../lib/api';
 import { toast } from 'sonner';
 
 export function JobPosting() {
@@ -52,27 +55,46 @@ export function JobPosting() {
         openings: '1',
         deadline: '',
         applicationFormConfig: null,
-        status: 'draft' // draft or open
+        status: 'draft',
+        // Admin-only — not sent to candidates
+        applicationCutoffDate: '',
+        requiredApplications: ''
     });
 
     // Load existing job if editing, or load pending form config for new jobs
     useEffect(() => {
-        if (id) {
-            loadJob();
-        } else {
-            // Load pending form config from sessionStorage for new jobs
-            const savedConfig = sessionStorage.getItem('pendingFormConfig');
-            if (savedConfig) {
+        const init = async () => {
+            if (id) {
+                await loadJob();
+            } else {
                 try {
-                    const config = JSON.parse(savedConfig);
-                    setFormData(prev => ({ ...prev, applicationFormConfig: config }));
-                    // Clear it after loading so it doesn't persist incorrectly
-                    sessionStorage.removeItem('pendingFormConfig');
+                    const currentUser = await getCurrentUser();
+                    if (currentUser && currentUser.role === 'company_admin') {
+                        setFormData(prev => ({
+                            ...prev,
+                            company: currentUser.companyInfo?.companyName || '',
+                            location: prev.location || currentUser.companyInfo?.location || ''
+                        }));
+                    }
                 } catch (err) {
-                    console.error('Failed to parse saved config:', err);
+                    console.error('Failed to get user details:', err);
+                }
+
+                // Load pending form config from sessionStorage for new jobs
+                const savedConfig = sessionStorage.getItem('pendingFormConfig');
+                if (savedConfig) {
+                    try {
+                        const config = JSON.parse(savedConfig);
+                        setFormData(prev => ({ ...prev, applicationFormConfig: config }));
+                        // Clear it after loading so it doesn't persist incorrectly
+                        sessionStorage.removeItem('pendingFormConfig');
+                    } catch (err) {
+                        console.error('Failed to parse saved config:', err);
+                    }
                 }
             }
-        }
+        };
+        init();
     }, [id]);
 
     const loadJob = async () => {
@@ -96,7 +118,12 @@ export function JobPosting() {
                     openings: job.openings?.toString() || '1',
                     deadline: job.deadline || '',
                     applicationFormConfig: job.applicationFormConfig || null,
-                    status: job.status || 'draft'
+                    status: job.status || 'draft',
+                    // Admin fields — load back for editing
+                    applicationCutoffDate: job.applicationCutoffDate
+                        ? new Date(job.applicationCutoffDate).toISOString().slice(0, 16)
+                        : '',
+                    requiredApplications: job.requiredApplications?.toString() || ''
                 });
             }
         } catch (err) {
@@ -273,8 +300,9 @@ export function JobPosting() {
                                             value={formData.company}
                                             onChange={handleChange}
                                             placeholder="e.g. TechCorp Inc."
-                                            className="h-12"
+                                            className="h-12 bg-slate-50 cursor-not-allowed"
                                             required
+                                            readOnly
                                         />
                                     </div>
                                 </div>
@@ -548,6 +576,90 @@ export function JobPosting() {
                                             ✓ {formData.applicationFormConfig.customFields.length} custom {formData.applicationFormConfig.customFields.length === 1 ? 'field' : 'fields'} configured
                                         </p>
                                     )}
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* ====== ADMIN CONTROLS — never visible to candidates ====== */}
+                        <Card className="border-amber-200 shadow-lg bg-gradient-to-br from-amber-50/60 to-orange-50/40">
+                            <CardHeader className="border-b border-amber-100">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                                        <Lock className="w-5 h-5 text-amber-700" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <CardTitle className="text-xl font-black text-amber-900">Admin Controls</CardTitle>
+                                            <span className="px-2 py-0.5 text-[10px] font-black uppercase tracking-widest bg-amber-200 text-amber-800 rounded-full">
+                                                Not visible to candidates
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-amber-700 mt-0.5">
+                                            Internal settings for application intake management
+                                        </p>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                                    {/* Application Cutoff Date + Time */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                                            <Clock className="w-3.5 h-3.5" />
+                                            Application Cutoff
+                                            <span className="text-amber-600 font-normal normal-case text-[10px] ml-1">— last date &amp; time to accept</span>
+                                        </label>
+                                        <input
+                                            type="datetime-local"
+                                            name="applicationCutoffDate"
+                                            value={formData.applicationCutoffDate}
+                                            onChange={handleChange}
+                                            className="w-full h-12 px-4 border border-amber-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 text-slate-800 text-sm font-medium"
+                                        />
+                                        {formData.applicationCutoffDate && (
+                                            <p className="text-xs text-amber-700 font-medium mt-1">
+                                                Applications close on{' '}
+                                                <strong>
+                                                    {new Date(formData.applicationCutoffDate).toLocaleString('en-IN', {
+                                                        dateStyle: 'medium', timeStyle: 'short'
+                                                    })}
+                                                </strong>
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Required Applications (quota) */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                                            <Hash className="w-3.5 h-3.5" />
+                                            Application Quota
+                                            <span className="text-amber-600 font-normal normal-case text-[10px] ml-1">— first N get interview call</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            name="requiredApplications"
+                                            value={formData.requiredApplications}
+                                            onChange={handleChange}
+                                            min="1"
+                                            placeholder="e.g. 10"
+                                            className="w-full h-12 px-4 border border-amber-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 text-slate-800 text-sm font-medium"
+                                        />
+                                        {formData.requiredApplications && (
+                                            <p className="text-xs text-amber-700 font-medium mt-1">
+                                                First <strong>{formData.requiredApplications}</strong> qualified applications will be shortlisted for interview.
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Info banner */}
+                                <div className="mt-5 flex items-start gap-3 p-3 bg-amber-100/70 border border-amber-200 rounded-xl">
+                                    <Lock className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+                                    <p className="text-xs text-amber-800 leading-relaxed">
+                                        These fields are <strong>strictly internal</strong>. Candidates will never see the cutoff datetime or quota number.
+                                        They are used by admins and recruiters to manage the intake pipeline.
+                                    </p>
                                 </div>
                             </CardContent>
                         </Card>

@@ -11,6 +11,23 @@ import {
     getDefaultWorkingHours
 } from './calendarService.js';
 
+const resolveGoogleTokens = async (user) => {
+    if (user?.googleTokens?.access_token || user?.googleTokens?.refresh_token) {
+        return {
+            access_token: user.googleTokens.access_token,
+            refresh_token: user.googleTokens.refresh_token
+        };
+    }
+
+    const availability = user?._id ? await CalendarAvailability.findByUserId(user._id) : null;
+    if (!availability?.googleAccessToken) return null;
+
+    return {
+        access_token: availability.googleAccessToken,
+        refresh_token: availability.googleRefreshToken
+    };
+};
+
 // Auto-schedule interview when application is approved
 export const autoScheduleInterview = async (applicationId) => {
     try {
@@ -111,36 +128,29 @@ export const autoScheduleInterview = async (applicationId) => {
 
         console.log(`Selected time slot: ${selectedSlot.start}`);
 
-        // 5. Create calendar event with Google Meet (if recruiter has calendar connected)
-        let meetingLink = 'https://meet.google.com/'; // Default
+        // 5. Create calendar event with Google Meet (real link required)
+        let meetingLink = null;
         let calendarEventId = null;
 
-        if (recruiterAvailability.googleAccessToken) {
-            try {
-                const recruiterTokens = {
-                    access_token: recruiterAvailability.googleAccessToken,
-                    refresh_token: recruiterAvailability.googleRefreshToken
-                };
-
-                const eventDetails = {
-                    summary: `Interview - ${job.title} - ${candidate.name}`,
-                    description: `Interview for ${job.title} position\n\nCandidate: ${candidate.name}\nEmail: ${candidate.email}`,
-                    start: selectedSlot.start,
-                    end: selectedSlot.end,
-                    attendees: [candidate.email, recruiter.email],
-                    timeZone: recruiterAvailability.timezone || 'Asia/Kolkata'
-                };
-
-                const calendarEvent = await createCalendarEvent(recruiterTokens, eventDetails);
-                meetingLink = calendarEvent.meetingLink;
-                calendarEventId = calendarEvent.eventId;
-
-                console.log(`Calendar event created: ${calendarEventId}`);
-            } catch (error) {
-                console.error('Error creating calendar event:', error);
-                // Continue with default meeting link
-            }
+        const recruiterTokens = await resolveGoogleTokens(recruiter);
+        if (!recruiterTokens) {
+            throw new Error('Google Calendar is not connected for this scheduler account');
         }
+
+        const eventDetails = {
+            summary: `Interview - ${job.title} - ${candidate.name}`,
+            description: `Interview for ${job.title} position\n\nCandidate: ${candidate.name}\nEmail: ${candidate.email}`,
+            start: selectedSlot.start,
+            end: selectedSlot.end,
+            attendees: [candidate.email, recruiter.email],
+            timeZone: recruiterAvailability.timezone || 'Asia/Kolkata'
+        };
+
+        const calendarEvent = await createCalendarEvent(recruiterTokens, eventDetails);
+        meetingLink = calendarEvent.meetingLink;
+        calendarEventId = calendarEvent.eventId;
+
+        console.log(`Calendar event created: ${calendarEventId}`);
 
         // 6. Create interview record
         const interview = await Interview.create({
@@ -255,6 +265,34 @@ const sendInterviewConfirmation = async (interview, candidate, recruiter, job) =
             },
             content: `Interview scheduled with ${candidate.name} for ${scheduledAt}`
         });
+
+        // Detailed notification for company admin
+        if (job?.postedBy) {
+            const companyAdmin = await User.findById(job.postedBy);
+            if (companyAdmin) {
+                await Communication.create({
+                    type: 'notification',
+                    subject: `Interview Scheduled: ${candidate.name} with ${recruiter.name}`,
+                    recipient: companyAdmin.email,
+                    recipientId: companyAdmin._id,
+                    status: 'sent',
+                    sentAt: new Date(),
+                    template: 'Company Admin Interview Notification',
+                    automated: true,
+                    relatedTo: {
+                        type: 'interview',
+                        id: interview._id
+                    },
+                    content: `Interview for ${job.title} scheduled. Candidate: ${candidate.name}. Recruiter: ${recruiter.name}. Time: ${scheduledAt}.`,
+                    metadata: {
+                        candidateName: candidate.name,
+                        recruiterName: recruiter.name,
+                        jobTitle: job.title,
+                        scheduledAt
+                    }
+                });
+            }
+        }
 
         console.log('Confirmation emails sent');
     } catch (error) {

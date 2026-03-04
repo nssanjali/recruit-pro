@@ -64,6 +64,7 @@ export const getUserStats = async (req, res) => {
         const recruiters = await User.countDocuments({ role: 'recruiter' });
         const admins = await User.countDocuments({ role: 'admin' });
         const companyAdmins = await User.countDocuments({ role: 'company_admin' });
+        const superAdmins = await User.countDocuments({ role: 'super_admin' });
 
         res.status(200).json({
             success: true,
@@ -72,7 +73,8 @@ export const getUserStats = async (req, res) => {
                 candidates,
                 recruiters,
                 admins,
-                companyAdmins
+                companyAdmins,
+                superAdmins
             }
         });
     } catch (error) {
@@ -91,7 +93,7 @@ export const updateUserRole = async (req, res) => {
     try {
         const { role } = req.body;
 
-        if (!['candidate', 'recruiter', 'admin', 'company_admin'].includes(role)) {
+        if (!['candidate', 'recruiter', 'admin', 'company_admin', 'super_admin'].includes(role)) {
             return res.status(400).json({
                 success: false,
                 message: 'Invalid role'

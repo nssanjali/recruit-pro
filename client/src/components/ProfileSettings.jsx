@@ -43,6 +43,7 @@ export function ProfileSettings({ user, onUpdate }) {
     const [error, setError] = useState('');
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [uploadingResume, setUploadingResume] = useState(false);
+    const [uploadingBanner, setUploadingBanner] = useState(false);
     const [formData, setFormData] = useState({
         name: user?.name || '',
         email: user?.email || '',
@@ -63,7 +64,8 @@ export function ProfileSettings({ user, onUpdate }) {
         industry: user?.companyInfo?.industry || '',
         companySize: user?.companyInfo?.companySize || '',
         companyLocation: user?.companyInfo?.location || '',
-        companyDescription: user?.companyInfo?.description || ''
+        companyDescription: user?.companyInfo?.description || '',
+        companyBanner: user?.companyInfo?.companyBanner || ''
     });
 
     useEffect(() => {
@@ -88,14 +90,16 @@ export function ProfileSettings({ user, onUpdate }) {
                 industry: user.companyInfo?.industry || '',
                 companySize: user.companyInfo?.companySize || '',
                 companyLocation: user.companyInfo?.location || '',
-                companyDescription: user.companyInfo?.description || ''
+                companyDescription: user.companyInfo?.description || '',
+                companyBanner: user.companyInfo?.companyBanner || ''
             });
         }
     }, [user]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const nextValue = name === 'phone' ? value.replace(/\D/g, '') : value;
+        setFormData(prev => ({ ...prev, [name]: nextValue }));
     };
 
     const handleFileUpload = async (e, type) => {
@@ -103,15 +107,33 @@ export function ProfileSettings({ user, onUpdate }) {
         if (!file) return;
 
         const isAvatar = type === 'avatar';
-        isAvatar ? setUploadingAvatar(true) : setUploadingResume(true);
+        const isBanner = type === 'banner';
+        isAvatar ? setUploadingAvatar(true) : isBanner ? setUploadingBanner(true) : setUploadingResume(true);
         setError('');
 
         try {
             const url = await uploadFile(file, type);
-            setFormData(prev => ({ ...prev, [type]: url }));
+            const fieldName = isBanner ? 'companyBanner' : type;
+            setFormData(prev => ({ ...prev, [fieldName]: url }));
 
-            // Automatically save the profile when avatar or resume is uploaded
-            const payload = { [type]: url };
+            // Automatically save the profile when avatar, banner, or resume is uploaded
+            let payload = {};
+            if (isBanner) {
+                payload = {
+                    companyInfo: {
+                        companyName: formData.companyName,
+                        companyEmail: formData.companyEmail,
+                        companyWebsite: formData.companyWebsite,
+                        industry: formData.industry,
+                        companySize: formData.companySize,
+                        location: formData.companyLocation,
+                        description: formData.companyDescription,
+                        companyBanner: url
+                    }
+                };
+            } else {
+                payload = { [type]: url };
+            }
             const result = await updateUserDetails(payload);
             if (onUpdate) onUpdate(result.data);
 
@@ -120,7 +142,7 @@ export function ProfileSettings({ user, onUpdate }) {
         } catch (err) {
             setError(err.message || `Failed to upload ${type}`);
         } finally {
-            isAvatar ? setUploadingAvatar(false) : setUploadingResume(false);
+            isAvatar ? setUploadingAvatar(false) : isBanner ? setUploadingBanner(false) : setUploadingResume(false);
         }
     };
 
@@ -128,6 +150,12 @@ export function ProfileSettings({ user, onUpdate }) {
         e.preventDefault();
         setLoading(true);
         setError('');
+
+        if (formData.phone && !/^\d{7,15}$/.test(formData.phone)) {
+            setError('Phone number must be 7 to 15 digits');
+            setLoading(false);
+            return;
+        }
 
         const payload = {
             name: formData.name,
@@ -154,7 +182,8 @@ export function ProfileSettings({ user, onUpdate }) {
                 industry: formData.industry,
                 companySize: formData.companySize,
                 location: formData.companyLocation,
-                description: formData.companyDescription
+                description: formData.companyDescription,
+                companyBanner: formData.companyBanner
             };
         }
 
@@ -192,8 +221,29 @@ export function ProfileSettings({ user, onUpdate }) {
                         <div className="lg:col-span-1 space-y-6">
                             {/* Avatar Card */}
                             <Card className="border-slate-200 shadow-xl overflow-hidden bg-white">
-                                <div className="h-32 bg-gradient-to-br from-[#4285f4] via-[#8b5cf6] to-[#ec4899] relative">
+                                <div className="h-32 bg-gradient-to-br from-[#4285f4] via-[#8b5cf6] to-[#ec4899] relative group/banner">
+                                    {user?.role === 'company_admin' && formData.companyBanner && (
+                                        <img src={formData.companyBanner} alt="Company Banner" className="absolute inset-0 w-full h-full object-cover" />
+                                    )}
                                     <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iZ3JpZCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBwYXR0ZXJuVW5pdHM9InVzZXJTcGFjZU9uVXNlIj48cGF0aCBkPSJNIDQwIDAgTCAwIDAgMCA0MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-30"></div>
+
+                                    {user?.role === 'company_admin' && (
+                                        <label className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-2 cursor-pointer transition-all opacity-100 md:opacity-0 md:group-hover/banner:opacity-100 focus-within:opacity-100 backdrop-blur-sm border border-white/20 z-10">
+                                            {uploadingBanner ? (
+                                                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                            ) : (
+                                                <Camera className="w-3.5 h-3.5" />
+                                            )}
+                                            {formData.companyBanner ? 'Change Banner' : 'Add Banner'}
+                                            <input
+                                                type="file"
+                                                className="hidden"
+                                                accept="image/*"
+                                                onChange={(e) => handleFileUpload(e, 'banner')}
+                                                disabled={uploadingBanner}
+                                            />
+                                        </label>
+                                    )}
                                 </div>
                                 <CardContent className="pt-0 pb-8 px-8 -mt-16 relative">
                                     <div className="flex flex-col items-center">
@@ -391,11 +441,15 @@ export function ProfileSettings({ user, onUpdate }) {
                                                     Company Phone
                                                 </label>
                                                 <Input
+                                                    type="tel"
                                                     name="phone"
                                                     value={formData.phone}
                                                     onChange={handleChange}
                                                     className="h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-[#10b981] transition-all rounded-xl font-medium"
                                                     placeholder="+1 (555) 000-0000"
+                                                    inputMode="numeric"
+                                                    pattern="[0-9]{7,15}"
+                                                    maxLength={15}
                                                 />
                                             </div>
 
@@ -479,6 +533,47 @@ export function ProfileSettings({ user, onUpdate }) {
                                                     maxLength={500}
                                                 />
                                             </div>
+
+                                            <div className="md:col-span-2 space-y-2">
+                                                <label className="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-2">
+                                                    <Camera className="w-3.5 h-3.5" />
+                                                    Company Banner
+                                                </label>
+                                                <div className="p-4 border border-slate-200 bg-slate-50 rounded-2xl">
+                                                    <div className="h-36 rounded-xl overflow-hidden border border-slate-200 bg-gradient-to-br from-[#4285f4] via-[#8b5cf6] to-[#ec4899]">
+                                                        {formData.companyBanner ? (
+                                                            <img src={formData.companyBanner} alt="Company Banner Preview" className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center text-white/95">
+                                                                <div className="text-center">
+                                                                    <Building2 className="w-7 h-7 mx-auto mb-2" />
+                                                                    <p className="text-xs font-bold uppercase tracking-wider">No banner uploaded</p>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="mt-4 flex items-center justify-between gap-3">
+                                                        <p className="text-xs text-slate-500 font-medium">
+                                                            Shown in sidebar, company dashboard, and job cards.
+                                                        </p>
+                                                        <label className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition-all">
+                                                            {uploadingBanner ? (
+                                                                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                            ) : (
+                                                                <Upload className="w-3.5 h-3.5" />
+                                                            )}
+                                                            {formData.companyBanner ? 'Replace Banner' : 'Upload Banner'}
+                                                            <input
+                                                                type="file"
+                                                                className="hidden"
+                                                                accept="image/*"
+                                                                onChange={(e) => handleFileUpload(e, 'banner')}
+                                                                disabled={uploadingBanner}
+                                                            />
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     ) : (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -518,11 +613,15 @@ export function ProfileSettings({ user, onUpdate }) {
                                                     Phone Number
                                                 </label>
                                                 <Input
+                                                    type="tel"
                                                     name="phone"
                                                     value={formData.phone}
                                                     onChange={handleChange}
                                                     className="h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-[#4285f4] transition-all rounded-xl font-medium"
                                                     placeholder="+1 (555) 000-0000"
+                                                    inputMode="numeric"
+                                                    pattern="[0-9]{7,15}"
+                                                    maxLength={15}
                                                 />
                                             </div>
 
@@ -814,6 +913,7 @@ export function ProfileSettings({ user, onUpdate }) {
                                                         maxLength={500}
                                                     />
                                                 </div>
+
                                             </div>
                                         ) : (
                                             <div className="space-y-6">
@@ -908,10 +1008,10 @@ export function ProfileSettings({ user, onUpdate }) {
                         </div>
                     </div>
                 </form>
-            </div>
+            </div >
 
             {/* Success/Error Notifications */}
-            <AnimatePresence>
+            < AnimatePresence >
                 {success && (
                     <motion.div
                         initial={{ opacity: 0, y: 50, scale: 0.9 }}
@@ -927,24 +1027,27 @@ export function ProfileSettings({ user, onUpdate }) {
                             <p className="text-sm text-emerald-50 font-medium">Your profile has been updated</p>
                         </div>
                     </motion.div>
-                )}
-                {error && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 50, scale: 0.9 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 50, scale: 0.9 }}
-                        className="fixed bottom-8 right-8 bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-5 rounded-2xl shadow-2xl flex items-center gap-4 z-50 max-w-md"
-                    >
-                        <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
-                            <X className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <p className="font-black text-lg">Error</p>
-                            <p className="text-sm text-red-50 font-medium">{error}</p>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
+                )
+                }
+                {
+                    error && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+                            className="fixed bottom-8 right-8 bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-5 rounded-2xl shadow-2xl flex items-center gap-4 z-50 max-w-md"
+                        >
+                            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                                <X className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <p className="font-black text-lg">Error</p>
+                                <p className="text-sm text-red-50 font-medium">{error}</p>
+                            </div>
+                        </motion.div>
+                    )
+                }
+            </AnimatePresence >
+        </div >
     );
 }

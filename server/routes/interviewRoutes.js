@@ -1,15 +1,22 @@
 import express from 'express';
+import { protect, authorize } from '../middleware/auth.js';
 import {
     scheduleInterview,
     getInterviews,
     getInterviewById,
     updateInterview,
-    deleteInterview
+    deleteInterview,
+    getMyInterviews,
+    getJobInterviews,
+    submitInterviewReview
 } from '../controllers/interviewController.js';
 
 const router = express.Router();
 
-router.post('/schedule', scheduleInterview);
+router.post('/schedule', protect, scheduleInterview);
+router.post('/:id/review-feedback', protect, authorize('recruiter'), submitInterviewReview);
+router.get('/my', protect, getMyInterviews);        // recruiter: own interviews
+router.get('/job/:jobId', protect, getJobInterviews);       // admin: all interviews for a job
 router.get('/', getInterviews);
 router.get('/:id', getInterviewById);
 router.put('/:id', updateInterview);

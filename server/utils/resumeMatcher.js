@@ -1,8 +1,8 @@
-import fs from 'fs';
+﻿import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-// pdf-parse v1 — exports a single async function: pdf(buffer) => { text, ... }
+// pdf-parse v1 ΓÇö exports a single async function: pdf(buffer) => { text, ... }
 const pdf = require('pdf-parse');
 import fetch from 'node-fetch';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -122,7 +122,7 @@ const cosineSimilarity = (vecA, vecB) => {
 
 /**
  * Parse resume PDF to extract text.
- * Fetches URLs directly — Cloudinary uploads are public (type:'upload'),
+ * Fetches URLs directly ΓÇö Cloudinary uploads are public (type:'upload'),
  * no URL signing needed.
  */
 export const parseResume = async (input) => {
@@ -131,7 +131,7 @@ export const parseResume = async (input) => {
 
         let dataBuffer;
 
-        // Handle URL — fetch directly, no signing needed
+        // Handle URL ΓÇö fetch directly, no signing needed
         if (input.startsWith('http')) {
             try {
                 const response = await fetch(input);
@@ -220,9 +220,9 @@ export const calculateMatchScore = (jobDescription, resumeText) => {
     const resumeVec = createVector(resumeTokens);
     const similarity = cosineSimilarity(jdVec, resumeVec);
 
-    // Scale similarity (0-1) to 0-100 with curve adjustment
+    // Scale similarity (0-1) to 0-100 with a more generous curve
     let rawScore = similarity * 100;
-    let adjustedScore = Math.min(rawScore * 2.5, 100);
+    let adjustedScore = Math.min(rawScore * 4.0, 100); // 4x multiplier — cosine on real CVs is naturally low
 
     // 2. Keyword Coverage (Tech Skills Match)
     const jdTechSkills = new Set(jdTokens.filter(t => TECH_SKILLS.has(t)));
@@ -241,9 +241,10 @@ export const calculateMatchScore = (jobDescription, resumeText) => {
 
     const coverage = jdTechSkills.size > 0 ? (skillsFound.length / jdTechSkills.size) : 0;
 
-    // 3. Blend Scores: 60% Similarity, 40% Coverage
-    let resumeScore = (adjustedScore * 0.6) + (coverage * 100 * 0.4);
-    resumeScore = Math.round(Math.min(resumeScore, 100));
+    // Blend: 55% Similarity, 45% Coverage
+    let resumeScore = (adjustedScore * 0.55) + (coverage * 100 * 0.45);
+    // Floor: any submitted resume gets at least 30
+    resumeScore = Math.round(Math.min(Math.max(resumeScore, 30), 100));
 
     const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -299,30 +300,31 @@ const extractRequiredExperience = (jdText) => {
 export const calculateProfileScore = ({ experienceYears = 0, skills = [], projects = [], jobDescription = '' }) => {
     // 1. Experience Score
     const requiredYears = extractRequiredExperience(jobDescription);
-    let experienceScore = 0;
+    let experienceScore;
 
     if (requiredYears === 0) {
-        // No requirement specified, give moderate score based on experience
-        experienceScore = Math.min((experienceYears / 5) * 100, 100);
+        // No explicit requirement — give a generous base (50%) + ramp up with experience
+        // Floor at 50: if they applied, they're worth reviewing
+        experienceScore = Math.min(50 + (experienceYears * 8), 100);
     } else {
-        // Compare candidate experience to requirement
         if (experienceYears >= requiredYears) {
             experienceScore = 100;
         } else {
-            experienceScore = (experienceYears / requiredYears) * 100;
+            // Partial credit — don't drop below 30 even at 0 years
+            experienceScore = Math.max(30, Math.round((experienceYears / requiredYears) * 100));
         }
     }
 
-    // 2. Projects Score
-    let projectScore = 0;
+    // 2. Projects Score  (raised floors — having any projects is positive signal)
     const projectCount = projects?.length || 0;
+    let projectScore;
+    if (projectCount === 0) projectScore = 40;  // no projects, but profile complete
+    else if (projectCount === 1) projectScore = 60;
+    else if (projectCount <= 3) projectScore = 75;
+    else if (projectCount <= 5) projectScore = 85;
+    else projectScore = 95;
 
-    if (projectCount === 0) projectScore = 10;
-    else if (projectCount <= 2) projectScore = 40;
-    else if (projectCount <= 5) projectScore = 70;
-    else projectScore = 90;
-
-    // 3. Skills Score
+    // 3. Skills Score against JD tech keywords
     const jdTokens = tokenize(jobDescription);
     const jdTechSkills = new Set(jdTokens.filter(t => TECH_SKILLS.has(t)));
     const candidateSkills = new Set((skills || []).map(s => {
@@ -332,20 +334,22 @@ export const calculateProfileScore = ({ experienceYears = 0, skills = [], projec
 
     let matchedSkills = 0;
     for (const skill of jdTechSkills) {
-        if (candidateSkills.has(skill)) {
-            matchedSkills++;
-        }
+        if (candidateSkills.has(skill)) matchedSkills++;
     }
 
-    const skillScore = jdTechSkills.size > 0
+    // If no tech skills in JD, give 65 as default (JD might not list them explicitly)
+    // Also add bonus for candidate having many skills even if not JD-listed
+    const jdCoverage = jdTechSkills.size > 0
         ? (matchedSkills / jdTechSkills.size) * 100
-        : 50; // Default if no tech skills in JD
+        : 65;
+    const skillBonus = Math.min(candidateSkills.size * 3, 20); // up to 20pt bonus for breadth
+    const skillScore = Math.min(Math.round(jdCoverage + skillBonus), 100);
 
     // 4. Final Profile Score: Weighted Average
     const profileScore = Math.round(
-        (experienceScore * 0.5) +
-        (skillScore * 0.3) +
-        (projectScore * 0.2)
+        (experienceScore * 0.45) +
+        (skillScore * 0.35) +
+        (projectScore * 0.20)
     );
 
     return {
@@ -373,39 +377,49 @@ const formatAnswers = (answersJSON) => {
 };
 
 /**
- * Generate AI-powered candidate insights using Gemini Pro
+ * Generate AI-powered candidate insights using Gemini
  * Returns: { summary, strengths, weaknesses }
- * SAFE: Returns fallback on error, never crashes
+ * SAFE: Auto-retries on rate limits, cascades through cheaper → pricier models.
  */
 export const generateCandidateInsights = async ({ jdText, resumeText, answersJSON = {} }) => {
-    // Fallback response
     const fallback = {
         summary: "AI analysis unavailable. Please review manually.",
         strengths: ["Resume submitted", "Application completed", "Profile available"],
         weaknesses: ["AI analysis could not be generated"]
     };
 
-    // Guard: Skip if Gemini not configured
+    console.log('\n🤖 ─────────────── GEMINI AI ANALYSIS ───────────────');
+
     if (!genAI) {
-        console.warn('Gemini API not configured. Skipping AI insights.');
+        console.warn('  ❌ GEMINI_API_KEY not set — skipping AI insights');
+        console.log('🤖 ─────────────────────────────────────────────────\n');
         return fallback;
     }
+    console.log('  ✅ Gemini API key: present');
 
-    // Guard: Skip if resume too short
     if (!resumeText || resumeText.length < 300) {
-        console.warn('Resume text too short for AI analysis.');
+        console.warn(`  ❌ Resume too short (${resumeText?.length ?? 0} chars, need ≥300) — skipping`);
+        console.log('🤖 ─────────────────────────────────────────────────\n');
         return fallback;
     }
+    console.log(`  📄 Resume text length : ${resumeText.length} chars`);
+    console.log(`  📋 JD text length     : ${jdText?.length ?? 0} chars`);
+    console.log(`  💬 Form answers       : ${Object.keys(answersJSON || {}).length} fields`);
 
-    try {
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const MODELS = ['gemini-2.5-flash'];
 
-        // Truncate resume to prevent token limits (keep first 3000 chars)
-        const truncatedResume = resumeText.substring(0, 3000);
-        const truncatedJD = jdText.substring(0, 2000);
-        const answersText = formatAnswers(answersJSON);
+    // Extract retry delay from 429 error message (e.g. "retry in 11.3s")
+    const getRetryDelay = (msg) => {
+        const m = msg?.match(/retry in (\d+(\.\d+)?)s/i);
+        return m ? Math.ceil(parseFloat(m[1])) * 1000 : null;
+    };
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-        const prompt = `You are a professional recruiter analyzing a candidate for a job position.
+    const truncatedResume = resumeText.substring(0, 3000);
+    const truncatedJD = (jdText || '').substring(0, 2000);
+    const answersText = formatAnswers(answersJSON);
+
+    const prompt = `You are a professional recruiter analyzing a candidate for a job position.
 
 Job Description:
 ${truncatedJD}
@@ -414,53 +428,77 @@ Candidate Resume:
 ${truncatedResume}
 ${answersText}
 
-Based on the resume and answers in the context of the job description, generate:
-
+Based on the resume and job description, generate:
 1. A professional 4-5 line summary of the candidate
 2. Exactly 3 key strengths
 3. Exactly 3 areas of concern or weaknesses
 
-IMPORTANT: 
-- Candidate answers are brief (1-2 lines each) but should be considered
-- Focus primarily on the resume content
-- Be specific and professional
-- Return ONLY valid JSON in this exact format:
-
+Return ONLY valid JSON in this exact format:
 {
   "summary": "4-5 line professional summary here",
   "strengths": ["strength 1", "strength 2", "strength 3"],
   "weaknesses": ["weakness 1", "weakness 2", "weakness 3"]
 }`;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+    for (const modelName of MODELS) {
+        let attempts = 0;
+        const MAX_ATTEMPTS = 2;
 
-        // Extract JSON from response (handle markdown code blocks)
-        let jsonText = text.trim();
-        if (jsonText.startsWith('```json')) {
-            jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-        } else if (jsonText.startsWith('```')) {
-            jsonText = jsonText.replace(/```\n?/g, '');
+        while (attempts < MAX_ATTEMPTS) {
+            attempts++;
+            try {
+                const model = genAI.getGenerativeModel({ model: modelName });
+                console.log(`  ⏳ Sending prompt [model: ${modelName}, attempt: ${attempts}]...`);
+                const t0 = Date.now();
+
+                const result = await model.generateContent(prompt);
+                const text = result.response.text();
+                console.log(`  ⚡ Gemini responded in ${Date.now() - t0}ms`);
+                console.log(`  📝 Raw (first 300): ${text.trim().substring(0, 300)}`);
+
+                let jsonText = text.trim();
+                if (jsonText.startsWith('```json')) jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+                else if (jsonText.startsWith('```')) jsonText = jsonText.replace(/```\n?/g, '');
+
+                const parsed = JSON.parse(jsonText);
+                if (!parsed.summary || !Array.isArray(parsed.strengths) || !Array.isArray(parsed.weaknesses)) {
+                    throw new Error('Invalid AI response structure');
+                }
+
+                console.log('  ✅ Parsed successfully:');
+                console.log(`     Summary   : "${parsed.summary.substring(0, 80)}..."`);
+                console.log(`     Strengths : ${JSON.stringify(parsed.strengths)}`);
+                console.log(`     Weaknesses: ${JSON.stringify(parsed.weaknesses)}`);
+                console.log('🤖 ─────────────────────────────────────────────────\n');
+
+                return {
+                    summary: parsed.summary,
+                    strengths: parsed.strengths.slice(0, 3),
+                    weaknesses: parsed.weaknesses.slice(0, 3)
+                };
+
+            } catch (error) {
+                const is429 = error.message?.includes('429');
+                const retryMs = getRetryDelay(error.message);
+
+                if (is429 && retryMs && attempts < MAX_ATTEMPTS) {
+                    console.warn(`  ⏳ Rate limited [${modelName}] — waiting ${retryMs / 1000}s then retrying...`);
+                    await sleep(retryMs + 500);
+                    continue;
+                }
+                if (is429) {
+                    console.warn(`  ⚠️  Quota exhausted [${modelName}] — trying next model...`);
+                    break;
+                }
+                console.error(`  ❌ Error [${modelName}]: ${error.message}`);
+                break;
+            }
         }
-
-        const parsed = JSON.parse(jsonText);
-
-        // Validate structure
-        if (!parsed.summary || !Array.isArray(parsed.strengths) || !Array.isArray(parsed.weaknesses)) {
-            throw new Error('Invalid AI response structure');
-        }
-
-        return {
-            summary: parsed.summary,
-            strengths: parsed.strengths.slice(0, 3),
-            weaknesses: parsed.weaknesses.slice(0, 3)
-        };
-
-    } catch (error) {
-        console.error('Error generating AI insights:', error.message);
-        return fallback;
     }
+
+    console.error('  ❌ All models failed or quota exhausted for today');
+    console.log('🤖 ─────────────────────────────────────────────────\n');
+    return fallback;
 };
 
 // ============================================================================
@@ -504,13 +542,26 @@ export const evaluateApplication = async ({
             jobDescription
         });
 
-        // Step 4: Calculate Final Score (60% resume, 40% profile)
-        const finalScore = Math.round(
-            (resumeResult.resumeScore * 0.6) +
-            (profileResult.profileScore * 0.4)
+        // Step 4: Final Score = 50% resume + 50% profile (both already have floors)
+        // AI sentiment dropped — it's always exactly 50% (3S/3W) so it adds noise not signal
+        const finalScore = Math.min(
+            Math.round((resumeResult.resumeScore * 0.50) + (profileResult.profileScore * 0.50)),
+            100
         );
 
-        // Step 5: Generate AI Insights (async, non-blocking)
+        // Detailed breakdown log
+        console.log('📊 ─────────── SCORE BREAKDOWN ───────────');
+        console.log(`   Resume TF-IDF  : ${resumeResult.resumeScore}%  (cosine similarity × 4, min 30)`);
+        console.log(`   ├ Cosine score : ${resumeResult.experienceScore}%  (similarity × 4 component)`);
+        console.log(`   └ Skill cover  : ${resumeResult.skillsScore}%  (${resumeResult.strongMatches?.length || 0} matched / ${(resumeResult.strongMatches?.length || 0) + (resumeResult.missingKeywords?.length || 0)} JD skills)`);
+        console.log(`   Profile score  : ${profileResult.profileScore}%`);
+        console.log(`   ├ Experience   : ${profileResult.experienceScore}%  (${experienceYears} yrs)`);
+        console.log(`   ├ Skills       : ${profileResult.skillScore}%  (${skills.length} skills on profile)`);
+        console.log(`   └ Projects     : ${profileResult.projectScore}%  (${projects?.length || 0} projects)`);
+        console.log(`   ─────────────────────────────────────────`);
+        console.log(`   FINAL SCORE    : ${finalScore}%  (50% resume + 50% profile)`);
+        console.log('📊 ─────────────────────────────────────────');
+
         let aiInsights = {
             summary: "AI analysis pending...",
             strengths: [],
@@ -526,7 +577,9 @@ export const evaluateApplication = async ({
             });
         }
 
+
         // Return comprehensive result
+
         return {
             // Scores
             finalScore,

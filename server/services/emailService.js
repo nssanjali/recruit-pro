@@ -252,6 +252,103 @@ const templates = {
             </body>
             </html>
         `
+    }),
+
+    schedulingBatchComplete: (data) => ({
+        subject: `✅ Interview Scheduling Complete — ${data.jobTitle}`,
+        html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: linear-gradient(135deg, #4285f4 0%, #8b5cf6 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+                    .stats { display: flex; gap: 16px; margin: 20px 0; }
+                    .stat { flex: 1; background: white; padding: 20px; border-radius: 10px; text-align: center; border: 1px solid #e5e7eb; }
+                    .stat-number { font-size: 36px; font-weight: 900; }
+                    .stat-label { font-size: 13px; color: #6b7280; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; }
+                    .green { color: #10b981; }
+                    .red { color: #ef4444; }
+                    .meta { background: white; padding: 16px 20px; border-radius: 8px; font-size: 13px; color: #6b7280; margin-top: 16px; }
+                    .footer { text-align: center; color: #6b7280; padding: 20px; font-size: 14px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>🤖 Auto-Scheduling Complete</h1>
+                        <p style="opacity:0.85; margin:0;">${data.jobTitle}</p>
+                    </div>
+                    <div class="content">
+                        <p>Hi ${data.adminName},</p>
+                        <p>The automated interview scheduling batch has finished. Here's the summary:</p>
+
+                        <div class="stats">
+                            <div class="stat">
+                                <div class="stat-number green">${data.scheduled}</div>
+                                <div class="stat-label">Scheduled</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-number red">${data.failed}</div>
+                                <div class="stat-label">Could Not Schedule</div>
+                            </div>
+                        </div>
+
+                        ${data.failed > 0 || data.skipped > 0 ? `
+                        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px 16px; margin-top:12px;">
+                            <p style="margin:4px 0; font-size:14px; color:#111827;"><strong>Failure Breakdown</strong></p>
+                            <p style="margin:4px 0; font-size:14px; color:#b91c1c;">
+                                No Google Calendar token: <strong>${data.reasonCounts?.noGoogleToken || 0}</strong>
+                            </p>
+                            <p style="margin:4px 0; font-size:14px; color:#b91c1c;">
+                                Google Calendar API disabled: <strong>${data.reasonCounts?.apiDisabled || 0}</strong>
+                            </p>
+                            <p style="margin:4px 0; font-size:14px; color:#b91c1c;">
+                                Calendar/Meet generation errors: <strong>${data.reasonCounts?.calendarCreateError || 0}</strong>
+                            </p>
+                            <p style="margin:4px 0; font-size:14px; color:#b91c1c;">
+                                Other errors: <strong>${data.reasonCounts?.otherErrors || 0}</strong>
+                            </p>
+                            <p style="margin:8px 0 4px 0; font-size:14px; color:#92400e;">
+                                No available slot in 14-day window: <strong>${data.reasonCounts?.noSlot || data.skipped || 0}</strong>
+                            </p>
+                        </div>` : ''}
+
+                        ${(data.reasonCounts?.noGoogleToken || 0) > 0 ? `
+                        <p style="color:#7c2d12; background:#ffedd5; padding:12px 16px; border-radius:8px; font-size:13px; margin-top:12px;">
+                            Some interviews failed because Google Calendar was not connected.
+                            Connect recruiter or company-admin calendar in settings.
+                            If your OAuth app is in <strong>Testing</strong> mode, add the account under
+                            Google Cloud Console → OAuth consent screen → Test users.
+                        </p>` : ''}
+
+                        ${(data.reasonCounts?.apiDisabled || 0) > 0 ? `
+                        <p style="color:#7c2d12; background:#ffedd5; padding:12px 16px; border-radius:8px; font-size:13px; margin-top:12px;">
+                            Google Calendar API is disabled for your Google project.
+                            Enable it in Google Cloud Console:
+                            <a href="https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview" target="_blank" rel="noreferrer">
+                                calendar-json.googleapis.com
+                            </a>
+                            and retry after a few minutes.
+                        </p>` : ''}
+
+                        <div class="meta">
+                            <p style="margin:4px 0;"><strong>Batch ID:</strong> ${data.batchId}</p>
+                            <p style="margin:4px 0;"><strong>Completed at:</strong> ${data.completedAt}</p>
+                        </div>
+
+                        <p style="margin-top:20px;">All scheduled candidates and recruiters have been notified via email with meeting links and calendar invites.</p>
+                    </div>
+                    <div class="footer">
+                        <p>RecruitPro Automated Scheduling Engine</p>
+                        <p>© ${new Date().getFullYear()} RecruitPro. All rights reserved.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `
     })
 };
 

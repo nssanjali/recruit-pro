@@ -7,6 +7,12 @@ import { Navigate, Outlet } from 'react-router-dom';
  * @param {Object} props.user - Current user object
  */
 const ProtectedRoute = ({ allowedRoles, user }) => {
+    const roleToPath = (role) => {
+        if (role === 'company_admin') return '/company-admin';
+        if (role === 'super_admin') return '/super-admin';
+        return `/${role}`;
+    };
+
     const token = localStorage.getItem('token');
 
     // If we're still loading user in App.jsx, user might be null initially.
@@ -26,7 +32,7 @@ const ProtectedRoute = ({ allowedRoles, user }) => {
         try {
             const fallbackUser = JSON.parse(userString);
             if (allowedRoles && !allowedRoles.includes(fallbackUser.role)) {
-                return <Navigate to={`/${fallbackUser.role}`} replace />;
+                return <Navigate to={roleToPath(fallbackUser.role)} replace />;
             }
             return <Outlet />;
         } catch (e) {
@@ -35,7 +41,7 @@ const ProtectedRoute = ({ allowedRoles, user }) => {
     }
 
     if (allowedRoles && !allowedRoles.includes(user.role)) {
-        return <Navigate to={`/${user.role}`} replace />;
+        return <Navigate to={roleToPath(user.role)} replace />;
     }
 
     return <Outlet />;

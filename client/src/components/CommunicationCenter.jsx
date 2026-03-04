@@ -1,11 +1,69 @@
-import { useState, useEffect } from 'react';
-import { Mail, Send, Calendar, CheckCircle2, Clock, Bot, Sparkles, Bell, Database, MessageSquare, Zap, ShieldCheck, Filter, Search } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Tabs, TabsContent, TabsList, TabsTrigger, Input } from './ui';
+import { useEffect, useMemo, useState } from 'react';
+import {
+    Mail,
+    Bell,
+    Calendar,
+    MessageSquare,
+    Search,
+    Clock3,
+    RefreshCw,
+    Database
+} from 'lucide-react';
+import {
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+    Badge,
+    Button,
+    Tabs,
+    TabsContent,
+    TabsList,
+    TabsTrigger,
+    Input
+} from './ui';
 import { motion } from 'motion/react';
+
+const STATUS_STYLES = {
+    sent: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    scheduled: 'bg-amber-100 text-amber-700 border-amber-200',
+    pending: 'bg-blue-100 text-blue-700 border-blue-200',
+    failed: 'bg-rose-100 text-rose-700 border-rose-200'
+};
+
+const TYPE_STYLES = {
+    email: {
+        icon: Mail,
+        badge: 'bg-blue-100 text-blue-700 border-blue-200'
+    },
+    reminder: {
+        icon: Bell,
+        badge: 'bg-violet-100 text-violet-700 border-violet-200'
+    },
+    calendar: {
+        icon: Calendar,
+        badge: 'bg-emerald-100 text-emerald-700 border-emerald-200'
+    },
+    notification: {
+        icon: MessageSquare,
+        badge: 'bg-slate-100 text-slate-700 border-slate-200'
+    }
+};
+
+const formatTime = (rawDate) => {
+    if (!rawDate) return 'Just now';
+    const date = new Date(rawDate);
+    if (Number.isNaN(date.getTime())) return 'Just now';
+
+    const mins = Math.floor((Date.now() - date.getTime()) / (1000 * 60));
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1440) return `${Math.floor(mins / 60)}h ago`;
+    return date.toLocaleDateString();
+};
 
 export function CommunicationCenter() {
     const [communications, setCommunications] = useState([]);
-
     const [storedCommunications, setStoredCommunications] = useState([]);
     const [stats, setStats] = useState({
         emailsSent: 0,
@@ -13,327 +71,251 @@ export function CommunicationCenter() {
         calendarInvites: 0,
         storedRecords: 0
     });
-
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
+    const [typeFilter, setTypeFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState('all');
 
-    // Fetch communications data from API
-    useEffect(() => {
-        const fetchCommunications = async () => {
-            try {
-                const token = localStorage.getItem('token');
-                const response = await fetch('http://localhost:5000/api/communications', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    setCommunications(result.data.communications || []);
-                    setStoredCommunications(result.data.storedCommunications || []);
-                    setStats(result.data.stats || {
-                        emailsSent: 0,
-                        scheduledReminders: 0,
-                        calendarInvites: 0,
-                        storedRecords: 0
-                    });
+    const fetchCommunications = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('http://localhost:5000/api/communications', {
+                headers: {
+                    Authorization: `Bearer ${token}`
                 }
-            } catch (error) {
-                console.error('Error fetching communications:', error);
-            }
-        };
+            });
 
+            if (!response.ok) {
+                throw new Error('Failed to load message center');
+            }
+
+            const result = await response.json();
+            setCommunications(result.data.communications || []);
+            setStoredCommunications(result.data.storedCommunications || []);
+            setStats(result.data.stats || {
+                emailsSent: 0,
+                scheduledReminders: 0,
+                calendarInvites: 0,
+                storedRecords: 0
+            });
+        } catch (err) {
+            console.error('Error fetching communications:', err);
+            setError(err.message || 'Failed to load communications');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         fetchCommunications();
     }, []);
 
-    const getTypeIcon = (type) => {
-        const icons = {
-            email: Mail,
-            reminder: Bell,
-            calendar: Calendar
-        };
-        return icons[type] || Mail;
-    };
+    const filteredCommunications = useMemo(() => {
+        return communications.filter((comm) => {
+            const matchesSearch = searchQuery.trim() === '' ||
+                [comm.subject, comm.recipient, comm.content, comm.message]
+                    .filter(Boolean)
+                    .some((v) => String(v).toLowerCase().includes(searchQuery.toLowerCase()));
 
-    const getStatusBadge = (status) => {
-        const statusConfig = {
-            sent: { label: 'Sent', variant: 'success' },
-            scheduled: { label: 'Scheduled', variant: 'default' },
-            pending: { label: 'Pending', variant: 'secondary' },
-            failed: { label: 'Failed', variant: 'destructive' }
-        };
-        const config = statusConfig[status] || { label: status || 'Unknown', variant: 'secondary' };
-        return (
-            <Badge variant={config.variant} className="uppercase tracking-widest text-[9px] font-black">
-                {config.label}
-            </Badge>
-        );
-    };
+            const matchesType = typeFilter === 'all' || comm.type === typeFilter;
+            const matchesStatus = statusFilter === 'all' || comm.status === statusFilter;
+            return matchesSearch && matchesType && matchesStatus;
+        });
+    }, [communications, searchQuery, typeFilter, statusFilter]);
 
     return (
-        <div className="p-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-            {/* Premium Header Section */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                <div className="space-y-1">
-                    <div className="flex items-center gap-3">
-                        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Signal Center</h2>
-                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-950 text-white text-[10px] font-black uppercase tracking-widest shadow-lg">
-                            <Zap className="w-2.5 h-2.5 text-yellow-400 fill-yellow-400" />
-                            Auto v2.0
-                        </div>
+        <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-6 sm:p-8">
+                <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+                    <div>
+                        <h2 className="text-3xl font-black text-slate-900 tracking-tight">Message Center</h2>
+                        <p className="text-slate-600 mt-1">Track interview messages, reminders, and automation updates.</p>
                     </div>
-                    <p className="text-slate-500 text-sm flex items-center gap-2">
-                        <ShieldCheck className="w-4 h-4 text-[#10b981]" />
-                        Automated communication system active
-                    </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                    <div className="relative group">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-[#4285f4] transition-colors" />
-                        <Input
-                            placeholder="Search communications..."
-                            className="pl-10 w-full sm:w-72 bg-white border-slate-200 focus:ring-[#4285f4]/20 transition-all shadow-sm"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </div>
-                    <Button variant="outline" className="border-slate-200 bg-white gap-2 hover:bg-slate-50 shadow-sm">
-                        <Filter className="w-4 h-4" />
-                        Filter
-                    </Button>
-                    <Button className="bg-slate-900 hover:bg-slate-800 text-white shadow-xl shadow-slate-900/10 gap-2 font-bold px-6">
-                        <Send className="w-4 h-4" />
-                        New Message
+                    <Button
+                        variant="outline"
+                        className="border-slate-200 bg-white hover:bg-slate-50"
+                        onClick={fetchCommunications}
+                        disabled={loading}
+                    >
+                        <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                        Refresh
                     </Button>
                 </div>
             </div>
 
-            {/* Hero Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                 {[
-                    { label: 'Emails Sent Today', value: stats.emailsSent.toString(), icon: Mail, color: 'from-[#4285f4] to-[#06b6d4]', trend: '+12%' },
-                    { label: 'Scheduled Reminders', value: stats.scheduledReminders.toString(), icon: Bell, color: 'from-[#8b5cf6] to-[#d946ef]', trend: 'Active' },
-                    { label: 'Calendar Invites', value: stats.calendarInvites.toString(), icon: Calendar, color: 'from-[#10b981] to-[#34d399]', trend: '+8%' },
-                    { label: 'Stored Records', value: stats.storedRecords.toString(), icon: Database, color: 'from-[#f59e0b] to-[#fbbf24]', trend: 'Total' }
-                ].map((stat, index) => {
-                    const Icon = stat.icon;
+                    { key: 'emailsSent', label: 'Emails Sent', icon: Mail, style: 'bg-blue-100 text-blue-700' },
+                    { key: 'scheduledReminders', label: 'Scheduled Reminders', icon: Bell, style: 'bg-violet-100 text-violet-700' },
+                    { key: 'calendarInvites', label: 'Calendar Invites', icon: Calendar, style: 'bg-emerald-100 text-emerald-700' },
+                    { key: 'storedRecords', label: 'Stored Records', icon: Database, style: 'bg-slate-100 text-slate-700' }
+                ].map((item) => {
+                    const Icon = item.icon;
                     return (
-                        <motion.div
-                            key={index}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.1 }}
-                        >
-                            <Card className="relative overflow-hidden border-none shadow-sm hover:shadow-xl transition-all group p-6 bg-white">
-                                <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${stat.color} opacity-[0.03] rounded-bl-full group-hover:opacity-[0.06] transition-all duration-700`} />
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${stat.color} flex items-center justify-center shadow-lg shadow-[#4285f4]/5 group-hover:scale-110 transition-transform`}>
-                                        <Icon className="w-6 h-6 text-white" />
+                        <Card key={item.key} className="border-slate-200">
+                            <CardContent className="pt-5">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">{item.label}</p>
+                                        <p className="text-3xl font-black text-slate-900 mt-2">{stats[item.key]}</p>
                                     </div>
-                                    <Badge variant="secondary" className="bg-slate-50 text-slate-500 border-slate-100 font-bold text-[10px]">
-                                        {stat.trend}
-                                    </Badge>
+                                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${item.style}`}>
+                                        <Icon className="w-5 h-5" />
+                                    </div>
                                 </div>
-                                <div>
-                                    <h3 className="text-3xl font-black text-slate-900 tracking-tighter mb-1">{stat.value}</h3>
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">{stat.label}</p>
-                                </div>
-                            </Card>
-                        </motion.div>
+                            </CardContent>
+                        </Card>
                     );
                 })}
             </div>
 
-            {/* Main Content */}
-            <Card className="border-slate-100 shadow-lg overflow-hidden bg-white">
-                <CardHeader className="p-8 border-b border-slate-50">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-                            <MessageSquare className="w-5 h-5 text-blue-600" />
+            <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="border-b border-slate-100 space-y-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                            <MessageSquare className="w-5 h-5" />
                         </div>
                         <div>
-                            <CardTitle className="text-xl font-black text-slate-900">Communication Hub</CardTitle>
-                            <p className="text-sm text-slate-500 font-medium mt-0.5">Automated messages and tracking</p>
+                            <CardTitle className="text-xl font-black text-slate-900">Communications</CardTitle>
+                            <p className="text-sm text-slate-500">Role-specific updates only</p>
                         </div>
                     </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="relative md:col-span-2">
+                            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                            <Input
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search subject, recipient, content..."
+                                className="pl-9 border-slate-200"
+                            />
+                        </div>
+                        <div className="flex gap-2">
+                            {['all', 'email', 'reminder', 'notification'].map((type) => (
+                                <Button
+                                    key={type}
+                                    size="sm"
+                                    variant={typeFilter === type ? 'default' : 'outline'}
+                                    className={typeFilter === type ? 'bg-slate-900 text-white' : 'border-slate-200'}
+                                    onClick={() => setTypeFilter(type)}
+                                >
+                                    {type}
+                                </Button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                        {['all', 'sent', 'scheduled', 'pending', 'failed'].map((status) => (
+                            <Button
+                                key={status}
+                                size="sm"
+                                variant={statusFilter === status ? 'default' : 'outline'}
+                                className={statusFilter === status ? 'bg-blue-600 text-white hover:bg-blue-700' : 'border-slate-200'}
+                                onClick={() => setStatusFilter(status)}
+                            >
+                                {status}
+                            </Button>
+                        ))}
+                    </div>
+                </CardHeader>
+
+                <CardContent className="pt-6">
                     <Tabs defaultValue="recent" className="w-full">
-                        <TabsList className="bg-slate-100/80 p-1 rounded-xl">
-                            <TabsTrigger value="recent" className="text-[11px] font-bold px-4 h-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">RECENT</TabsTrigger>
-                            <TabsTrigger value="database" className="text-[11px] font-bold px-4 h-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">DATABASE</TabsTrigger>
+                        <TabsList className="bg-slate-100">
+                            <TabsTrigger value="recent">Recent Feed</TabsTrigger>
+                            <TabsTrigger value="history">History</TabsTrigger>
                         </TabsList>
 
-                        {/* Recent Communications */}
-                        <TabsContent value="recent" className="mt-6 space-y-4">
-                            {communications.length === 0 ? (
-                                <Card className="p-12 border-2 border-dashed border-slate-200">
-                                    <div className="text-center">
-                                        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                                            <MessageSquare className="w-8 h-8 text-slate-400" />
-                                        </div>
-                                        <h3 className="text-lg font-black text-slate-900 mb-2">No Communications Yet</h3>
-                                        <p className="text-sm text-slate-500 max-w-md mx-auto">
-                                            Communications will appear here once you start scheduling interviews or sending messages to candidates.
-                                        </p>
-                                        <Button className="mt-6 bg-slate-900 hover:bg-slate-800 text-white">
-                                            <Send className="w-4 h-4 mr-2" />
-                                            Send First Message
-                                        </Button>
-                                    </div>
-                                </Card>
+                        <TabsContent value="recent" className="mt-5 space-y-3">
+                            {loading ? (
+                                <p className="text-sm text-slate-500">Loading communications...</p>
+                            ) : error ? (
+                                <p className="text-sm text-red-600">{error}</p>
+                            ) : filteredCommunications.length === 0 ? (
+                                <div className="py-12 text-center">
+                                    <MessageSquare className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                                    <p className="text-sm text-slate-500">No messages for the selected filters.</p>
+                                </div>
                             ) : (
-                                communications
-                                    .filter(comm =>
-                                        searchQuery === '' ||
-                                        comm.subject?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                        comm.recipient?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                        comm.content?.toLowerCase().includes(searchQuery.toLowerCase())
-                                    )
-                                    .map((comm, index) => {
-                                        const TypeIcon = getTypeIcon(comm.type);
-                                        return (
-                                            <motion.div
-                                                key={comm.id || comm._id || index}
-                                                initial={{ opacity: 0, x: -20 }}
-                                                animate={{ opacity: 1, x: 0 }}
-                                                transition={{ delay: index * 0.1 }}
-                                            >
-                                                <Card className="p-6 hover:shadow-md transition-all border-slate-100">
-                                                    <div className="flex items-start gap-4">
-                                                        <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${comm.type === 'email' ? 'from-[#4285f4] to-[#06b6d4]' :
-                                                            comm.type === 'reminder' ? 'from-[#8b5cf6] to-[#d946ef]' :
-                                                                'from-[#10b981] to-[#34d399]'
-                                                            } flex items-center justify-center flex-shrink-0 shadow-lg`}>
-                                                            <TypeIcon className="w-6 h-6 text-white" />
-                                                        </div>
+                                filteredCommunications.map((comm, index) => {
+                                    const typeCfg = TYPE_STYLES[comm.type] || TYPE_STYLES.notification;
+                                    const TypeIcon = typeCfg.icon;
+                                    const statusClass = STATUS_STYLES[comm.status] || 'bg-slate-100 text-slate-700 border-slate-200';
 
-                                                        <div className="flex-1">
-                                                            <div className="flex items-start justify-between mb-2">
-                                                                <div className="flex-1">
-                                                                    <div className="flex items-center gap-2 mb-1">
-                                                                        <h4 className="font-bold text-slate-900">{comm.subject || 'No Subject'}</h4>
-                                                                        {comm.automated && (
-                                                                            <Badge variant="outline" className="border-[#8b5cf6] text-[#8b5cf6] text-[9px] font-black uppercase tracking-wider">
-                                                                                <Bot className="w-3 h-3 mr-1" />
-                                                                                Auto
-                                                                            </Badge>
-                                                                        )}
-                                                                    </div>
-                                                                    <p className="text-sm text-slate-500 font-medium">To: {comm.recipient || 'Unknown'}</p>
-                                                                </div>
-                                                                {getStatusBadge(comm.status)}
-                                                            </div>
-
-                                                            <div className="bg-slate-50 rounded-xl p-4 mb-3">
-                                                                <p className="text-sm text-slate-600 font-medium">{comm.content || comm.message || 'No content'}</p>
-                                                            </div>
-
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex items-center gap-4 text-xs text-slate-500 font-medium">
-                                                                    <span className="flex items-center gap-1">
-                                                                        <Clock className="w-3 h-3" />
-                                                                        {comm.status === 'sent'
-                                                                            ? (comm.sentAt || new Date(comm.createdAt).toLocaleString())
-                                                                            : (comm.scheduledFor || new Date(comm.scheduledAt).toLocaleString())
-                                                                        }
-                                                                    </span>
-                                                                    {comm.template && <span>Template: {comm.template}</span>}
-                                                                </div>
-                                                                <Button variant="ghost" size="sm" className="text-[#4285f4] hover:text-[#3b79db] font-bold">
-                                                                    View Details
-                                                                </Button>
-                                                            </div>
-                                                        </div>
+                                    return (
+                                        <motion.div
+                                            key={comm._id || comm.id || index}
+                                            initial={{ opacity: 0, y: 8 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: index * 0.03 }}
+                                            className="rounded-xl border border-slate-200 p-4 bg-white hover:shadow-sm transition-all"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${typeCfg.badge}`}>
+                                                    <TypeIcon className="w-4 h-4" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <p className="font-bold text-slate-900 truncate">{comm.subject || 'No subject'}</p>
+                                                        <Badge className={`capitalize ${statusClass}`}>{comm.status || 'unknown'}</Badge>
                                                     </div>
-                                                </Card>
-                                            </motion.div>
-                                        );
-                                    })
+                                                    <p className="text-sm text-slate-600 mt-1 line-clamp-2">
+                                                        {comm.content || comm.message || 'No content'}
+                                                    </p>
+                                                    <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
+                                                        <span className="inline-flex items-center gap-1">
+                                                            <Clock3 className="w-3 h-3" />
+                                                            {formatTime(comm.sentAt || comm.createdAt || comm.scheduledFor)}
+                                                        </span>
+                                                        {comm.recipient && <span>To: {comm.recipient}</span>}
+                                                        <Badge className={`capitalize ${typeCfg.badge}`}>{comm.type || 'notification'}</Badge>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    );
+                                })
                             )}
                         </TabsContent>
 
-                        {/* Communication Database */}
-                        <TabsContent value="database" className="mt-6 space-y-4">
-                            {storedCommunications.map((record, index) => (
-                                <motion.div
-                                    key={index}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: index * 0.1 }}
-                                >
-                                    <Card className="p-6 hover:shadow-md transition-all border-slate-100">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 flex items-center justify-center text-white font-black text-lg shadow-lg">
-                                                    {record.candidate.split(' ').map(n => n[0]).join('')}
-                                                </div>
-                                                <div>
-                                                    <h4 className="font-bold text-slate-900 mb-1">{record.candidate}</h4>
-                                                    <div className="flex items-center gap-3 text-sm text-slate-500 font-medium">
-                                                        <span className="flex items-center gap-1">
-                                                            <MessageSquare className="w-3 h-3" />
-                                                            {record.totalMessages} messages
-                                                        </span>
-                                                        <span>•</span>
-                                                        <span className="flex items-center gap-1">
-                                                            <Calendar className="w-3 h-3" />
-                                                            {record.interviews} interviews
-                                                        </span>
-                                                        <span>•</span>
-                                                        <span className="flex items-center gap-1">
-                                                            <Clock className="w-3 h-3" />
-                                                            {record.lastContact}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-3">
-                                                <Badge variant={record.status === 'Active' ? 'success' : 'default'} className="uppercase tracking-widest text-[9px] font-black">
-                                                    {record.status}
-                                                </Badge>
-                                                <Button variant="outline" size="sm" className="font-bold">
-                                                    View History
-                                                </Button>
-                                            </div>
+                        <TabsContent value="history" className="mt-5 space-y-3">
+                            {storedCommunications.length === 0 ? (
+                                <div className="py-10 text-center">
+                                    <Database className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                                    <p className="text-sm text-slate-500">No history available.</p>
+                                </div>
+                            ) : (
+                                storedCommunications.map((record, index) => (
+                                    <motion.div
+                                        key={`${record.candidate}-${index}`}
+                                        initial={{ opacity: 0, y: 8 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: index * 0.03 }}
+                                        className="rounded-xl border border-slate-200 bg-white p-4 flex items-center justify-between gap-3"
+                                    >
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-slate-900 truncate">{record.candidate || 'Contact'}</p>
+                                            <p className="text-sm text-slate-500">
+                                                {record.totalMessages || 0} messages | {record.interviews || 0} interviews
+                                            </p>
                                         </div>
-                                    </Card>
-                                </motion.div>
-                            ))}
+                                        <div className="text-right">
+                                            <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
+                                                {record.status || 'Active'}
+                                            </Badge>
+                                            <p className="text-xs text-slate-500 mt-1">{formatTime(record.lastContact)}</p>
+                                        </div>
+                                    </motion.div>
+                                ))
+                            )}
                         </TabsContent>
                     </Tabs>
-                </CardHeader>
-            </Card>
-
-            {/* Automation Info */}
-            <Card className="border-slate-200 shadow-lg bg-white p-8">
-                <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                        <CheckCircle2 className="w-6 h-6 text-emerald-600" />
-                    </div>
-                    <div>
-                        <h4 className="font-black text-slate-900 mb-3 text-lg">Automated Communication Workflow</h4>
-                        <ul className="space-y-3 text-sm text-slate-600 font-medium">
-                            <li className="flex items-start gap-3">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2" />
-                                <span>Interview confirmations are automatically sent within 5 minutes of scheduling</span>
-                            </li>
-                            <li className="flex items-start gap-3">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2" />
-                                <span>Google Meet invites are generated and sent with calendar integration</span>
-                            </li>
-                            <li className="flex items-start gap-3">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2" />
-                                <span>Reminders are scheduled 24 hours and 1 hour before interviews</span>
-                            </li>
-                            <li className="flex items-start gap-3">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2" />
-                                <span>All communications are stored in the database for compliance and tracking</span>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
+                </CardContent>
             </Card>
         </div>
     );

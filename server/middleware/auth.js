@@ -44,6 +44,11 @@ export const protect = async (req, res, next) => {
 // Grant access to specific roles
 export const authorize = (...roles) => {
     return (req, res, next) => {
+        // Super admin is allowed to access any authorized route.
+        if (req.user?.role === 'super_admin') {
+            return next();
+        }
+
         if (!roles.includes(req.user.role)) {
             return res.status(403).json({
                 success: false,

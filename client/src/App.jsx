@@ -6,8 +6,8 @@ import { RecruiterDashboard } from "./components/RecruiterDashboard";
 import { RecruiterProfile } from "./components/RecruiterProfile";
 import { ProfileSettings } from "./components/ProfileSettings";
 import { AdminDashboard } from "./components/AdminDashboard";
+import { SuperAdminDashboard } from "./components/SuperAdminDashboard";
 import { CompanyAdminDashboard } from "./components/CompanyAdminDashboard";
-import { BrowserExtension } from "./components/BrowserExtension";
 import { InterviewScheduling } from "./components/InterviewScheduling";
 import { RecruiterAssignment } from "./components/RecruiterAssignment";
 import { JobCandidates } from "./components/JobCandidates";
@@ -16,14 +16,23 @@ import { AuthPage } from "./components/AuthPage";
 import { AuthSuccess } from "./components/AuthSuccess";
 import { CompanySignup } from "./components/CompanySignup";
 import { JobDetails } from "./components/JobDetails";
-import { MatchAnalysis } from "./components/MatchAnalysis";
 import { JobPosting } from "./components/JobPosting";
+import { CompanyJobOverview } from "./components/CompanyJobOverview";
 import { JobFormBuilderPage } from "./components/JobFormBuilderPage";
 import { AnalyticsDashboard } from "./components/AnalyticsDashboard";
 import { ApplicationReview } from "./components/ApplicationReview";
+import { RecruiterCalendar } from "./components/RecruiterCalendar";
+import { CandidateCalendar } from "./components/CandidateCalendar";
+import { AdminCalendar } from "./components/AdminCalendar";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { Toaster } from "./components/ui";
 import { getCurrentUser } from "./lib/api";
+
+const roleToPath = (role) => {
+  if (role === 'company_admin') return '/company-admin';
+  if (role === 'super_admin') return '/super-admin';
+  return `/${role}`;
+};
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -75,15 +84,15 @@ export default function App() {
     <>
       <Routes>
         {/* Public Routes */}
-        <Route path="/login" element={!user ? <AuthPage /> : <Navigate to={`/${user.role}`} replace />} />
+        <Route path="/login" element={!user ? <AuthPage /> : <Navigate to={roleToPath(user.role)} replace />} />
         <Route path="/company-signup" element={!user ? <CompanySignup onSwitchToLogin={() => window.location.href = '/login'} /> : <Navigate to="/company-admin" replace />} />
         <Route path="/auth/success" element={<AuthSuccess />} />
 
         {/* Protected Routes */}
-        <Route element={<ProtectedRoute allowedRoles={['candidate', 'recruiter', 'admin', 'company_admin']} user={user} />}>
+        <Route element={<ProtectedRoute allowedRoles={['candidate', 'recruiter', 'admin', 'company_admin', 'super_admin']} user={user} />}>
           <Route path="/" element={
             <Layout user={user} onLogout={handleLogout} activePage={getActivePage()}>
-              <Navigate to={user ? `/${user.role === 'company_admin' ? 'company-admin' : user.role}` : '/login'} replace />
+              <Navigate to={user ? roleToPath(user.role) : '/login'} replace />
             </Layout>
           } />
 
@@ -94,6 +103,11 @@ export default function App() {
                 <CandidateDashboard user={user} />
               </Layout>
             } />
+            <Route path="/candidate-calendar" element={
+              <Layout user={user} onLogout={handleLogout} activePage="candidate-calendar">
+                <CandidateCalendar />
+              </Layout>
+            } />
           </Route>
 
           {/* Recruiter Routes */}
@@ -101,6 +115,11 @@ export default function App() {
             <Route path="/recruiter" element={
               <Layout user={user} onLogout={handleLogout} activePage="recruiter">
                 <RecruiterDashboard user={user} />
+              </Layout>
+            } />
+            <Route path="/calendar" element={
+              <Layout user={user} onLogout={handleLogout} activePage="calendar">
+                <RecruiterCalendar />
               </Layout>
             } />
             <Route path="/scheduling" element={
@@ -124,6 +143,15 @@ export default function App() {
             } />
           </Route>
 
+          {/* Super Admin Routes */}
+          <Route element={<ProtectedRoute allowedRoles={['super_admin']} user={user} />}>
+            <Route path="/super-admin" element={
+              <Layout user={user} onLogout={handleLogout} activePage="super-admin">
+                <SuperAdminDashboard user={user} />
+              </Layout>
+            } />
+          </Route>
+
           {/* Company Admin Routes */}
           <Route element={<ProtectedRoute allowedRoles={['company_admin']} user={user} />}>
             <Route path="/company-admin" element={
@@ -141,6 +169,11 @@ export default function App() {
                 <JobPosting />
               </Layout>
             } />
+            <Route path="/company-admin/jobs/:id" element={
+              <Layout user={user} onLogout={handleLogout} activePage="company-admin">
+                <CompanyJobOverview />
+              </Layout>
+            } />
             <Route path="/build-form" element={<JobFormBuilderPage />} />
             <Route path="/build-form/:id" element={<JobFormBuilderPage />} />
             <Route path="/analytics" element={
@@ -148,10 +181,15 @@ export default function App() {
                 <AnalyticsDashboard />
               </Layout>
             } />
+            <Route path="/admin-calendar" element={
+              <Layout user={user} onLogout={handleLogout} activePage="admin-calendar">
+                <AdminCalendar />
+              </Layout>
+            } />
           </Route>
 
           {/* Shared Recruiter & Company Admin Routes */}
-          <Route element={<ProtectedRoute allowedRoles={['recruiter', 'company_admin', 'admin']} user={user} />}>
+          <Route element={<ProtectedRoute allowedRoles={['recruiter', 'company_admin', 'admin', 'super_admin']} user={user} />}>
             <Route path="/jobs/:id/candidates" element={
               <Layout user={user} onLogout={handleLogout} activePage="recruiter">
                 <JobCandidates />
@@ -170,11 +208,6 @@ export default function App() {
               <CommunicationCenter />
             </Layout>
           } />
-          <Route path="/extension" element={
-            <Layout user={user} onLogout={handleLogout} activePage="extension">
-              <BrowserExtension />
-            </Layout>
-          } />
           <Route path="/profile" element={
             <Layout user={user} onLogout={handleLogout} activePage="profile">
               {user?.role === 'recruiter' ? (
@@ -188,9 +221,6 @@ export default function App() {
             <Layout user={user} onLogout={handleLogout} activePage="candidate">
               <JobDetails user={user} />
             </Layout>
-          } />
-          <Route path="/jobs/:id/analysis" element={
-            <MatchAnalysis user={user} />
           } />
 
         </Route>

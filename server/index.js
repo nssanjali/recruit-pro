@@ -19,6 +19,7 @@ import templateRoutes from './routes/templateRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import communicationRoutes from './routes/communicationRoutes.js';
 import recruiterRoutes from './routes/recruiterRoutes.js';
+import calendarRoutes from './routes/calendarRoutes.js';
 
 import { initializeCronJobs } from './services/cronService.js';
 
@@ -75,6 +76,7 @@ app.use('/api/templates', templateRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/communications', communicationRoutes);
 app.use('/api/recruiters', recruiterRoutes);
+app.use('/api/calendar', calendarRoutes);
 
 // Health / root endpoint
 app.get('/', (req, res) => {
@@ -122,12 +124,6 @@ const startServer = async () => {
     app.listen(PORT, () => {
         console.log('---------------------------------------');
         console.log(`🚀 Server running on port ${PORT}`);
-        console.log(`🌍 CORS allowed origin: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
-        console.log(
-            `🗄️ MongoDB URI loaded: ${process.env.MONGODB_URI ? 'YES' : 'NO'}`
-        );
-        console.log('📧 Email automation: ENABLED');
-        console.log('⏰ Cron jobs: ACTIVE');
         console.log('---------------------------------------');
     });
 };

@@ -36,14 +36,14 @@ export const sendInterviewNotifications = async (data) => {
       html: `
         <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 12px;">
           <h2 style="color: #4285f4;">Hello ${participant.name},</h2>
-          <p>Your interview has been scheduled with RecruitPro's AI-Powered system.</p>
+          <p>Your interview has been scheduled with RecruitPro.</p>
           <div style="background: #f4f7ff; padding: 20px; border-radius: 8px;">
             <p><strong>Role:</strong> ${participant.role}</p>
             <p><strong>Date:</strong> ${date}</p>
             <p><strong>Time:</strong> ${time}</p>
-            <p><strong>Proctored Meeting Link:</strong> <a href="${meetingLink}">${meetingLink}</a></p>
+            <p><strong>Google Meet Link:</strong> <a href="${meetingLink}">${meetingLink}</a></p>
           </div>
-          <p style="margin-top: 20px;">Please ensure you are in a quiet environment and have your ID ready for the proctored session.</p>
+          <p style="margin-top: 20px;">Please join 10 minutes early and keep your internet connection stable.</p>
           <p>Best regards,<br/>RecruitPro Team</p>
         </div>
       `

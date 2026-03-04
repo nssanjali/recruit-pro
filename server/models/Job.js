@@ -25,6 +25,13 @@ export const Job = {
             postedBy: typeof data.postedBy === 'string' ? new ObjectId(data.postedBy) : data.postedBy,
             candidates: data.candidates || [], // list of candidate ObjectIds
             applicationFormConfig: data.applicationFormConfig || null, // Custom form configuration
+            // Admin-only fields — NEVER exposed to candidates
+            applicationCutoffDate: data.applicationCutoffDate ? new Date(data.applicationCutoffDate) : null,
+            requiredApplications: data.requiredApplications ? parseInt(data.requiredApplications, 10) : null,
+            // Interview scheduling pipeline state
+            schedulingStatus: data.schedulingStatus || 'pending', // pending | in_progress | scheduled | failed | no_recruiters
+            schedulingResult: data.schedulingResult || null,       // { scheduled, failed, batchId, completedAt }
+            schedulingError: data.schedulingError || null,
             createdAt: new Date(),
             updatedAt: new Date()
         };

@@ -4,9 +4,11 @@ import {
     getApplication,
     createApplication,
     updateApplication,
+    updateApplicationStatus,
     deleteApplication,
     approveApplication,
-    rejectApplication
+    rejectApplication,
+    reanalyzeApplication
 } from '../controllers/applicationController.js';
 import { protect, authorize } from '../middleware/auth.js';
 
@@ -21,11 +23,18 @@ router.route('/:id')
     .put(protect, authorize('recruiter', 'admin'), updateApplication)
     .delete(protect, deleteApplication);
 
+router.route('/:id/status')
+    .put(protect, authorize('recruiter', 'admin', 'company_admin'), updateApplicationStatus);
+
 router.route('/:id/approve')
     .put(protect, authorize('admin'), approveApplication);
 
 router.route('/:id/reject')
     .put(protect, authorize('admin'), rejectApplication);
+
+// [DEV] Force re-run Gemini AI analysis — bypasses cache, clears stored result
+router.route('/:id/reanalyze')
+    .post(protect, authorize('recruiter', 'admin', 'company_admin'), reanalyzeApplication);
 
 export default router;
 

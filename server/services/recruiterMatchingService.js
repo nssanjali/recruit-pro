@@ -47,36 +47,55 @@ const calculateExpertiseMatch = (jobDescription, recruiterExpertise) => {
     return jobTokens.length > 0 ? (matches / jobTokens.length) * 100 : 0;
 };
 
+
+const calculateRoleMatch = (jobTitle, jobDescription, recruiterRoles) => {
+    if (!recruiterRoles || recruiterRoles.length === 0) return 50; // neutral if not set
+    if (!jobTitle) return 50;
+
+    const jobTitleTokens = new Set(tokenize(jobTitle));
+    const jobDescTokens = new Set(tokenize(jobDescription || '').slice(0, 50)); // first 50 JD words
+
+    let bestScore = 0;
+    for (const role of recruiterRoles) {
+        const roleTokens = tokenize(role);
+        if (roleTokens.length === 0) continue;
+
+        let matched = 0;
+        for (const token of roleTokens) {
+            if (jobTitleTokens.has(token) || jobDescTokens.has(token)) matched++;
+        }
+        const score = (matched / roleTokens.length) * 100;
+        if (score > bestScore) bestScore = score;
+    }
+
+    return Math.round(bestScore);
+};
+
 /**
  * Calculate match score between a job and a recruiter
+ * Weights: 35% skill + 25% expertise + 30% role + 10% workload
  * @param {Object} job - Job document
  * @param {Object} recruiter - Recruiter document
  * @returns {number} Match score (0-100)
  */
 export const calculateRecruiterJobMatch = (job, recruiter) => {
-    // Extract skills from job description and requirements
     const jobSkills = [
         ...(job.skills || []),
         ...(job.requiredSkills || [])
     ];
 
-    // Calculate skill match (40% weight)
     const skillMatch = calculateSkillMatch(jobSkills, recruiter.skills || []);
-
-    // Calculate expertise match (30% weight)
     const expertiseMatch = calculateExpertiseMatch(
         (job.description || '') + ' ' + (job.requirements || ''),
         recruiter.expertise || []
     );
+    const roleMatch = calculateRoleMatch(job.title, job.description, recruiter.roles || []);
 
-    // Calculate workload score (30% weight)
-    // Lower workload = higher score
     const workloadScore = Recruiter.calculateWorkloadScore(recruiter);
-    const maxWorkload = 20; // Assume max workload of 20 (10 jobs + 10 interviews)
+    const maxWorkload = 20;
     const workloadMatch = Math.max(0, (1 - (workloadScore / maxWorkload)) * 100);
 
-    // Weighted average
-    const finalScore = (skillMatch * 0.4) + (expertiseMatch * 0.3) + (workloadMatch * 0.3);
+    const finalScore = (skillMatch * 0.35) + (expertiseMatch * 0.25) + (roleMatch * 0.30) + (workloadMatch * 0.10);
 
     return Math.round(Math.min(finalScore, 100));
 };

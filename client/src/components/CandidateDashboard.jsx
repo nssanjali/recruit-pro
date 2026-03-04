@@ -1,223 +1,189 @@
-import { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from './ui';
-import { Briefcase, MapPin, Building, Clock, TrendingUp, Star, DollarSign } from 'lucide-react';
-import { getJobs, applyJob, getApplications } from '../lib/api';
-import { toast } from 'sonner';
-import { JobApplicationModal } from './JobApplicationModal';
-
+import { useEffect, useMemo, useState } from 'react';
+import {
+    Badge,
+    Button,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+    Input,
+    NativeSelect,
+    Tabs,
+    TabsContent,
+    TabsList,
+    TabsTrigger
+} from './ui';
+import { Briefcase, Building, Clock, MapPin, Search } from 'lucide-react';
+import { getApplications, getJobs } from '../lib/api';
+import { getApplicationStatusLabel, normalizeApplicationStatus } from '../lib/applicationStatus';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 export function CandidateDashboard({ user }) {
     const navigate = useNavigate();
     const [jobs, setJobs] = useState([]);
     const [applications, setApplications] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [selectedJob, setSelectedJob] = useState(null);
-    const [showApplicationModal, setShowApplicationModal] = useState(false);
+    const [search, setSearch] = useState('');
+    const [jobType, setJobType] = useState('all');
+    const [filter, setFilter] = useState('all');
+    const [appStatus, setAppStatus] = useState('all');
 
     useEffect(() => {
-        const fetchData = async () => {
+        const load = async () => {
             try {
-                const [fetchedJobs, fetchedApplications] = await Promise.all([
-                    getJobs(),
-                    getApplications()
-                ]);
-                setJobs(fetchedJobs || []);
-                setApplications(fetchedApplications || []);
+                const [jobData, appData] = await Promise.all([getJobs(), getApplications()]);
+                setJobs(jobData || []);
+                setApplications(appData || []);
             } catch (error) {
-                console.error('Error fetching data:', error);
-                toast.error(error.message || "Failed to load jobs");
+                toast.error(error.message || 'Failed to load candidate dashboard');
             } finally {
                 setLoading(false);
             }
         };
-
-        fetchData();
+        load();
     }, []);
 
-    const handleApplyClick = (job) => {
-        setSelectedJob(job);
-        setShowApplicationModal(true);
-    };
+    const latestApplicationByJob = useMemo(() => {
+        const map = new Map();
+        applications.forEach((app) => {
+            const key = String(app.jobId || app.job?._id || '');
+            if (!key || map.has(key)) return;
+            map.set(key, app);
+        });
+        return map;
+    }, [applications]);
 
-    const handleApplicationSuccess = async () => {
-        // Refresh applications
-        try {
-            const fetchedApplications = await getApplications();
-            setApplications(fetchedApplications || []);
-        } catch (error) {
-            console.error('Error refreshing applications:', error);
+    const jobTypes = useMemo(
+        () => Array.from(new Set(jobs.map((j) => j.jobType).filter(Boolean))),
+        [jobs]
+    );
+
+    const filteredJobs = useMemo(() => {
+        let list = [...jobs];
+        if (search.trim()) {
+            const q = search.toLowerCase();
+            list = list.filter((job) =>
+                [job.title, job.company, job.location]
+                    .filter(Boolean)
+                    .some((v) => String(v).toLowerCase().includes(q))
+            );
         }
-    };
+        if (jobType !== 'all') list = list.filter((job) => job.jobType === jobType);
+        if (filter === 'applied') list = list.filter((job) => latestApplicationByJob.has(String(job._id)));
+        if (filter === 'not_applied') list = list.filter((job) => !latestApplicationByJob.has(String(job._id)));
+        return list;
+    }, [jobs, search, jobType, filter, latestApplicationByJob]);
 
-    // Check if user has already applied to a job
-    const hasApplied = (jobId) => {
-        return applications.some(app => app.jobId === jobId || app.job?._id === jobId);
-    };
-
-    const handleApply = async (jobId) => {
-        try {
-            await applyJob(jobId);
-            toast.success('Application submitted successfully!');
-            // Optional: Update local state to show 'Applied' status
-        } catch (error) {
-            toast.error(error.message || 'Failed to apply');
+    const filteredApplications = useMemo(() => {
+        let list = [...applications];
+        if (appStatus !== 'all') {
+            list = list.filter((app) => normalizeApplicationStatus(app.status) === appStatus);
         }
-    };
+        return list;
+    }, [applications, appStatus]);
 
     return (
-        <div className="space-y-8">
-            <div>
-                <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">
-                    Welcome back, {user?.name?.split(' ')[0] || 'Candidate'}!
+        <div className="space-y-6">
+            <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-blue-50 p-6">
+                <h2 className="text-3xl font-black text-slate-900">
+                    Welcome back, {user?.name?.split(' ')[0] || 'Candidate'}
                 </h2>
-                <p className="text-slate-500 font-medium">Here's your job search overview</p>
+                <p className="text-slate-600 mt-1">Use filters to find jobs quickly and track your application pipeline.</p>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="border-slate-200 shadow-lg">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Applications</p>
-                                <p className="text-3xl font-black text-slate-900 mt-2">{applications.length}</p>
-                            </div>
-                            <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                                <Briefcase className="w-6 h-6 text-blue-600" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-slate-200 shadow-lg">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Interviews</p>
-                                <p className="text-3xl font-black text-slate-900 mt-2">0</p>
-                            </div>
-                            <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                                <Clock className="w-6 h-6 text-purple-600" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-slate-200 shadow-lg">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Profile Views</p>
-                                <p className="text-3xl font-black text-slate-900 mt-2">0</p>
-                            </div>
-                            <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center">
-                                <TrendingUp className="w-6 h-6 text-emerald-600" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Available Jobs */}
-            <Card className="border-slate-200 shadow-lg">
+            <Card className="border-slate-200">
                 <CardHeader className="border-b border-slate-100">
-                    <CardTitle className="text-xl font-black">Available Jobs</CardTitle>
+                    <CardTitle className="text-xl font-black">Candidate Workspace</CardTitle>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="relative md:col-span-2">
+                            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                            <Input className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search title, company, location" />
+                        </div>
+                        <NativeSelect value={jobType} onChange={(e) => setJobType(e.target.value)}>
+                            <option value="all">All Job Types</option>
+                            {jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                        </NativeSelect>
+                    </div>
                 </CardHeader>
                 <CardContent className="pt-6">
-                    {loading ? (
-                        <div className="text-center py-12">
-                            <div className="w-16 h-16 rounded-full border-4 border-blue-100 border-t-blue-600 animate-spin mx-auto mb-4"></div>
-                            <p className="text-slate-500 font-medium">Loading jobs...</p>
-                        </div>
-                    ) : jobs.length === 0 ? (
-                        <div className="text-center py-12">
-                            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                                <Briefcase className="w-8 h-8 text-slate-400" />
+                    <Tabs defaultValue="discover">
+                        <TabsList className="bg-slate-100">
+                            <TabsTrigger value="discover">Discover Jobs</TabsTrigger>
+                            <TabsTrigger value="applications">My Applications</TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="discover" className="space-y-4 mt-4">
+                            <div className="flex gap-2 flex-wrap">
+                                <Button size="sm" variant={filter === 'all' ? 'default' : 'outline'} onClick={() => setFilter('all')}>All</Button>
+                                <Button size="sm" variant={filter === 'not_applied' ? 'default' : 'outline'} onClick={() => setFilter('not_applied')}>Not Applied</Button>
+                                <Button size="sm" variant={filter === 'applied' ? 'default' : 'outline'} onClick={() => setFilter('applied')}>Applied</Button>
                             </div>
-                            <p className="text-slate-500 font-medium">No jobs available yet</p>
-                            <p className="text-sm text-slate-400 mt-1">Check back later for new opportunities</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {jobs.map((job) => (
-                                <div key={job._id} className="p-6 border border-slate-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all group">
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div className="flex-1">
-                                            <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-600 transition-colors">{job.title}</h3>
-                                            <div className="flex items-center gap-4 mt-2 text-sm text-slate-500">
-                                                <span className="flex items-center gap-1.5">
-                                                    <Building className="w-4 h-4" />
-                                                    {job.company}
-                                                </span>
-                                                <span className="flex items-center gap-1.5">
-                                                    <MapPin className="w-4 h-4" />
-                                                    {job.location}
-                                                </span>
-                                                {job.salaryRange && (
-                                                    <span className="flex items-center gap-1.5">
-                                                        <DollarSign className="w-4 h-4" />
-                                                        {job.salaryRange}
-                                                    </span>
-                                                )}
+
+                            {loading ? (
+                                <p className="text-slate-500">Loading jobs...</p>
+                            ) : filteredJobs.length === 0 ? (
+                                <p className="text-slate-500">No jobs match your filters.</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {filteredJobs.map((job) => {
+                                        const app = latestApplicationByJob.get(String(job._id));
+                                        return (
+                                            <div key={job._id} className="rounded-xl border border-slate-200 p-4 bg-white">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <p className="font-bold text-slate-900">{job.title}</p>
+                                                        <p className="text-sm text-slate-500 flex items-center gap-2 mt-1">
+                                                            <Building className="w-4 h-4" /> {job.company || 'Company'}
+                                                            <MapPin className="w-4 h-4 ml-2" /> {job.location || 'Location'}
+                                                        </p>
+                                                    </div>
+                                                    {app && <Badge className="capitalize bg-emerald-100 text-emerald-700 border-emerald-200">{getApplicationStatusLabel(app.status)}</Badge>}
+                                                </div>
+                                                <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
+                                                    <span className="text-xs text-slate-400 flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {new Date(job.createdAt).toLocaleDateString()}</span>
+                                                    <div className="flex gap-2">
+                                                        <Button variant="outline" onClick={() => navigate(`/jobs/${job._id}`)}>View Details</Button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </TabsContent>
+
+                        <TabsContent value="applications" className="space-y-4 mt-4">
+                            <div className="flex gap-2 flex-wrap">
+                                <Button size="sm" variant={appStatus === 'all' ? 'default' : 'outline'} onClick={() => setAppStatus('all')}>All</Button>
+                                <Button size="sm" variant={appStatus === 'pending' ? 'default' : 'outline'} onClick={() => setAppStatus('pending')}>Pending</Button>
+                                <Button size="sm" variant={appStatus === 'reviewing' ? 'default' : 'outline'} onClick={() => setAppStatus('reviewing')}>Reviewing</Button>
+                                <Button size="sm" variant={appStatus === 'shortlisted' ? 'default' : 'outline'} onClick={() => setAppStatus('shortlisted')}>Shortlisted</Button>
+                                <Button size="sm" variant={appStatus === 'rejected' ? 'default' : 'outline'} onClick={() => setAppStatus('rejected')}>Rejected</Button>
+                            </div>
+                            {filteredApplications.length === 0 ? (
+                                <p className="text-slate-500">No applications found.</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {filteredApplications.map((app) => (
+                                        <div key={app._id} className="rounded-xl border border-slate-200 p-4 bg-white flex items-center justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="font-bold text-slate-900">{app.job?.title || 'Job'}</p>
+                                                <p className="text-sm text-slate-500">{app.job?.company || 'Company'} | {app.job?.location || 'Location'}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Badge className="capitalize bg-slate-100 text-slate-700 border-slate-200">{getApplicationStatusLabel(app.status)}</Badge>
+                                                <Button variant="outline" onClick={() => navigate(`/jobs/${app.job?._id || app.jobId}`)}>View Job</Button>
                                             </div>
                                         </div>
-                                        <div className="flex flex-col items-end gap-2">
-                                            {job.jobType && (
-                                                <Badge className="bg-blue-100 text-blue-700 border-blue-200">
-                                                    {job.jobType}
-                                                </Badge>
-                                            )}
-                                            {job.status && (
-                                                <Badge className={job.status === 'open' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-700 border-slate-200'}>
-                                                    {job.status}
-                                                </Badge>
-                                            )}
-                                        </div>
-                                    </div>
-                                    {job.description && (
-                                        <p className="text-sm text-slate-600 mb-4 line-clamp-2">{job.description}</p>
-                                    )}
-                                    <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                                        <div className="flex items-center gap-2 text-xs text-slate-400">
-                                            <Clock className="w-3.5 h-3.5" />
-                                            Posted {new Date(job.createdAt).toLocaleDateString()}
-                                        </div>
-
-                                        <div className="flex items-center gap-3">
-                                            <Button
-                                                variant="outline"
-                                                onClick={() => navigate(`/jobs/${job._id}`)}
-                                                className="border-slate-200 hover:bg-slate-50 text-slate-600"
-                                            >
-                                                View Details
-                                            </Button>
-                                            <Button
-                                                onClick={() => handleApplyClick(job)}
-                                                disabled={hasApplied(job._id)}
-                                                className={hasApplied(job._id)
-                                                    ? "bg-emerald-600 hover:bg-emerald-600 text-white cursor-not-allowed"
-                                                    : "bg-blue-600 hover:bg-blue-700 text-white"
-                                                }
-                                            >
-                                                {hasApplied(job._id) ? '✓ Applied' : 'Apply Now'}
-                                            </Button>
-                                        </div>
-                                    </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                            )}
+                        </TabsContent>
+                    </Tabs>
                 </CardContent>
             </Card>
 
-            <JobApplicationModal
-                job={selectedJob}
-                isOpen={showApplicationModal}
-                onClose={() => setShowApplicationModal(false)}
-                onSuccess={handleApplicationSuccess}
-                user={user}
-            />
         </div>
     );
 }

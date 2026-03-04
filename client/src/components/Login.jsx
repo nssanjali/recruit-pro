@@ -1,7 +1,19 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, Lock, LogIn, ArrowRight, ShieldCheck, Github, Chrome } from 'lucide-react';
+import {
+    Mail,
+    Lock,
+    LogIn,
+    ArrowRight,
+    ShieldAlert,
+    Github,
+    Chrome,
+    CheckCircle2,
+    Briefcase,
+    Calendar,
+    Users
+} from 'lucide-react';
 import { Card, Button, Input, Badge } from './ui';
 
 export function Login({ onSwitchToSignup, onForgotPassword }) {
@@ -55,132 +67,170 @@ export function Login({ onSwitchToSignup, onForgotPassword }) {
     };
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center bg-[#f8fafc] p-4 font-sans">
-            {/* Subtle Gradient Background */}
-            <div className="fixed inset-0 bg-[radial-gradient(circle_at_top_right,_#4285f410,_transparent_40%),radial-gradient(circle_at_bottom_left,_#8b5cf610,_transparent_40%)] pointer-events-none" />
+        <div className="min-h-screen w-full bg-slate-50 p-4 sm:p-6">
+            <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_right,_#4285f418,_transparent_44%),radial-gradient(circle_at_bottom_left,_#8b5cf612,_transparent_42%)]" />
 
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="w-full max-w-[420px] z-10"
-            >
-                <Card className="shadow-xl bg-white border-white/20">
-                    <div className="p-8">
-                        <div className="flex flex-col items-center text-center mb-8">
-                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#4285f4] to-[#8b5cf6] flex items-center justify-center mb-4 shadow-lg shadow-[#4285f4]/20">
-                                <LogIn className="w-6 h-6 text-white" />
-                            </div>
-                            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Welcome Back</h2>
-                            <p className="text-slate-500 text-sm mt-1">Sign in to your RecruitPro account</p>
+            <div className="relative z-10 mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-6xl grid-cols-1 items-center gap-6 lg:grid-cols-2">
+                <motion.div
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="hidden lg:block"
+                >
+                    <Card className="overflow-hidden border-slate-200 shadow-lg">
+                        <div className="bg-gradient-to-r from-sky-700 via-blue-700 to-cyan-700 p-7 text-white">
+                            <p className="text-xs font-black tracking-[0.2em] text-blue-100 uppercase">Recruiter Command Center</p>
+                            <h2 className="mt-2 text-3xl font-black">Welcome Back</h2>
+                            <p className="mt-1 text-sm text-blue-100">Sign in to continue managing jobs, applications, and interviews.</p>
                         </div>
+                        <div className="grid grid-cols-3 gap-3 p-4 bg-white">
+                            {[
+                                { label: 'Pipelines', icon: Briefcase },
+                                { label: 'Interviews', icon: Calendar },
+                                { label: 'Candidates', icon: Users }
+                            ].map((item) => {
+                                const Icon = item.icon;
+                                return (
+                                    <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
+                                        <Icon className="mx-auto mb-1 h-4 w-4 text-sky-700" />
+                                        <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">{item.label}</p>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div className="space-y-2 border-t border-slate-100 p-5">
+                            {[
+                                'One account for recruiter, candidate, and admin roles',
+                                'Secure role-based authentication and session handling',
+                                'Google and GitHub login available'
+                            ].map((item) => (
+                                <p key={item} className="flex items-center gap-2 text-sm text-slate-700">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                    {item}
+                                </p>
+                            ))}
+                        </div>
+                    </Card>
+                </motion.div>
 
-                        <AnimatePresence>
-                            {error && (
-                                <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    className="mb-6 p-3 bg-red-50 border border-red-100 rounded-lg text-red-600 text-xs font-medium flex items-center gap-2"
-                                >
-                                    <ShieldCheck className="w-4 h-4" />
-                                    {error}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div className="space-y-1.5">
-                                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Email Address</label>
-                                <div className="relative">
-                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <Input
-                                        type="email"
-                                        name="email"
-                                        value={formData.email}
-                                        onChange={handleChange}
-                                        placeholder="name@example.com"
-                                        className="pl-10 h-11"
-                                        required
-                                    />
+                <motion.div
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="w-full"
+                >
+                    <Card className="mx-auto w-full max-w-[460px] border-slate-200 bg-white shadow-xl">
+                        <div className="p-8">
+                            <div className="mb-8 text-center">
+                                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#4285f4] to-[#8b5cf6] shadow-lg shadow-[#4285f4]/20">
+                                    <LogIn className="h-6 w-6 text-white" />
                                 </div>
+                                <h1 className="text-3xl font-black tracking-tight text-slate-900">Sign In</h1>
+                                <p className="mt-1 text-sm text-slate-500">Access your RecruitPro workspace</p>
                             </div>
 
-                            <div className="space-y-1.5">
-                                <div className="flex justify-between items-center">
-                                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Password</label>
-                                    <button
-                                        type="button"
-                                        onClick={onForgotPassword}
-                                        className="text-[11px] font-bold text-[#4285f4] hover:underline uppercase tracking-tight"
+                            <AnimatePresence>
+                                {error && (
+                                    <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: 'auto', opacity: 1 }}
+                                        className="mb-5 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700"
                                     >
-                                        Forgot?
-                                    </button>
+                                        <ShieldAlert className="h-4 w-4" />
+                                        {error}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div className="space-y-1.5">
+                                    <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Email Address</label>
+                                    <div className="relative">
+                                        <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                        <Input
+                                            type="email"
+                                            name="email"
+                                            value={formData.email}
+                                            onChange={handleChange}
+                                            placeholder="name@example.com"
+                                            className="h-11 rounded-xl border-slate-200 pl-10"
+                                            required
+                                        />
+                                    </div>
                                 </div>
-                                <div className="relative">
-                                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <Input
-                                        type="password"
-                                        name="password"
-                                        value={formData.password}
-                                        onChange={handleChange}
-                                        placeholder="••••••••"
-                                        className="pl-10 h-11"
-                                        required
-                                    />
+
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Password</label>
+                                        <button
+                                            type="button"
+                                            onClick={onForgotPassword}
+                                            className="text-[11px] font-bold uppercase tracking-wider text-[#4285f4] hover:underline"
+                                        >
+                                            Forgot?
+                                        </button>
+                                    </div>
+                                    <div className="relative">
+                                        <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                        <Input
+                                            type="password"
+                                            name="password"
+                                            value={formData.password}
+                                            onChange={handleChange}
+                                            placeholder="********"
+                                            className="h-11 rounded-xl border-slate-200 pl-10"
+                                            required
+                                        />
+                                    </div>
                                 </div>
+
+                                <Button
+                                    type="submit"
+                                    className="h-11 w-full rounded-xl bg-[#4285f4] text-sm font-bold text-white hover:bg-[#3b79db]"
+                                    disabled={loading}
+                                >
+                                    {loading ? 'Authorizing...' : 'Sign In'}
+                                    <ArrowRight className="ml-2 h-4 w-4" />
+                                </Button>
+                            </form>
+
+                            <div className="mt-8 flex items-center gap-4">
+                                <div className="h-px flex-1 bg-slate-200" />
+                                <Badge variant="outline" className="border-slate-200 bg-slate-50 text-[10px] font-black tracking-[0.16em] text-slate-500 uppercase">
+                                    Continue With
+                                </Badge>
+                                <div className="h-px flex-1 bg-slate-200" />
                             </div>
 
-                            <Button
-                                type="submit"
-                                variant="primary"
-                                className="w-full h-11 text-sm font-bold"
-                                disabled={loading}
-                            >
-                                {loading ? 'Authorizing...' : 'Sign In'}
-                                <ArrowRight className="w-4 h-4 ml-2" />
-                            </Button>
-                        </form>
-
-                        <div className="mt-8 flex items-center gap-4 text-slate-300">
-                            <div className="h-px bg-slate-200 flex-1" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Continue with</span>
-                            <div className="h-px bg-slate-200 flex-1" />
-                        </div>
-
-                        <div className="mt-6 grid grid-cols-2 gap-3">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => handleOAuthLogin('google')}
-                                className="h-10 text-xs font-semibold bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                            >
-                                <Chrome className="w-4 h-4 mr-2 text-[#4285f4]" />
-                                Google
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => handleOAuthLogin('github')}
-                                className="h-10 text-xs font-semibold bg-slate-900 border-slate-900 text-white hover:bg-slate-800"
-                            >
-                                <Github className="w-4 h-4 mr-2" />
-                                GitHub
-                            </Button>
-                        </div>
-
-                        <div className="mt-8 text-center">
-                            <p className="text-slate-500 text-sm">
-                                New here?{' '}
-                                <button
-                                    onClick={onSwitchToSignup}
-                                    className="text-[#4285f4] font-bold hover:underline"
+                            <div className="mt-5 grid grid-cols-2 gap-3">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => handleOAuthLogin('google')}
+                                    className="h-10 rounded-xl border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50"
                                 >
+                                    <Chrome className="mr-2 h-4 w-4 text-[#4285f4]" />
+                                    Google
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => handleOAuthLogin('github')}
+                                    className="h-10 rounded-xl border-slate-900 bg-slate-900 text-xs font-semibold text-white hover:bg-slate-800"
+                                >
+                                    <Github className="mr-2 h-4 w-4" />
+                                    GitHub
+                                </Button>
+                            </div>
+
+                            <p className="mt-7 text-center text-sm text-slate-500">
+                                New here?{' '}
+                                <button onClick={onSwitchToSignup} className="font-bold text-[#4285f4] hover:underline">
                                     Create Account
                                 </button>
                             </p>
                         </div>
-                    </div>
-                </Card>
-            </motion.div>
+                    </Card>
+                </motion.div>
+            </div>
         </div>
     );
 }

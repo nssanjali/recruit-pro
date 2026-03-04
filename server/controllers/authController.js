@@ -18,11 +18,11 @@ export const register = async (req, res) => {
             });
         }
 
-        // Prevent company_admin registration through regular signup
-        if (role === 'company_admin') {
+        // Prevent privileged roles through regular public signup
+        if (role === 'company_admin' || role === 'super_admin' || role === 'admin') {
             return res.status(400).json({
                 success: false,
-                message: 'Please use the company registration endpoint for company admin accounts'
+                message: 'This role cannot be created from public signup'
             });
         }
 
@@ -243,6 +243,13 @@ export const updateDetails = async (req, res) => {
             if (req.body.department !== undefined) fieldsToUpdate.department = req.body.department;
             if (req.body.specialization !== undefined) fieldsToUpdate.specialization = req.body.specialization;
             if (req.body.title !== undefined) fieldsToUpdate.title = req.body.title;
+        } else if (req.user.role === 'company_admin') {
+            if (req.body.companyInfo !== undefined) {
+                fieldsToUpdate.companyInfo = {
+                    ...req.user.companyInfo,
+                    ...req.body.companyInfo
+                };
+            }
         }
 
         // Update user and return the NEW document
@@ -439,6 +446,9 @@ const sendTokenResponse = (user, statusCode, res) => {
             ...(user.role === 'recruiter' && {
                 department: user.department,
                 specialization: user.specialization
+            }),
+            ...(user.role === 'company_admin' && {
+                companyInfo: user.companyInfo
             })
         }
     });

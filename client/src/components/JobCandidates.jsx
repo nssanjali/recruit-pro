@@ -3,8 +3,9 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getJobCandidates, getJob } from '../lib/api';
 import { Card, Button, Badge, Progress } from './ui';
-import { Bot, Sparkles, User, FileText, ArrowLeft, Mail, Eye } from 'lucide-react';
+import { Bot, Sparkles, User, FileText, ArrowLeft, Mail, Eye, Briefcase } from 'lucide-react';
 import { motion } from 'motion/react';
+import { getApplicationStatusLabel, normalizeApplicationStatus } from '../lib/applicationStatus';
 
 export function JobCandidates() {
     const { id } = useParams(); // Job ID
@@ -40,13 +41,15 @@ export function JobCandidates() {
 
     const getScoreColor = (score) => {
         if (score >= 80) return 'bg-emerald-500';
-        if (score >= 50) return 'bg-yellow-500';
+        if (score >= 60) return 'bg-blue-500';
+        if (score >= 40) return 'bg-yellow-500';
         return 'bg-red-500';
     };
 
     const getScoreLabel = (score) => {
-        if (score >= 80) return 'Good Match';
-        if (score >= 50) return 'Average Match';
+        if (score >= 80) return 'Excellent Match';
+        if (score >= 60) return 'Good Match';
+        if (score >= 40) return 'Fair Match';
         return 'Low Match';
     };
 
@@ -60,9 +63,20 @@ export function JobCandidates() {
             <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
                 <Card className="p-6 bg-slate-900 text-white border-none shadow-xl">
                     <div className="flex items-start justify-between">
-                        <div>
-                            <h1 className="text-2xl font-bold mb-2">{job?.title}</h1>
-                            <p className="text-slate-400">{job?.department} • {job?.location}</p>
+                        <div className="flex items-center gap-4">
+                            {job?.companyLogo ? (
+                                <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-lg border border-slate-700 flex-shrink-0 bg-white">
+                                    <img src={job.companyLogo} alt={job.company || "Company Logo"} className="w-full h-full object-cover" />
+                                </div>
+                            ) : (
+                                <div className="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center border border-slate-700 flex-shrink-0 bg-gradient-to-br from-slate-800 to-slate-900 shadow-inner">
+                                    <Briefcase className="w-8 h-8 text-slate-400" />
+                                </div>
+                            )}
+                            <div>
+                                <h1 className="text-2xl font-bold mb-1">{job?.title}</h1>
+                                <p className="text-slate-400">{job?.department} • {job?.location}</p>
+                            </div>
                         </div>
                         <div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-lg">
                             <Bot className="w-5 h-5 text-emerald-400" />
@@ -81,7 +95,9 @@ export function JobCandidates() {
                     </Card>
                 ) : (
                     candidates.map((candidate, index) => {
-                        const score = candidate.finalScore || candidate.matchScore || 0;
+                        const score = Number(candidate.finalScore ?? candidate.matchScore ?? 0);
+                        const status = candidate.applicationStatusNormalized || normalizeApplicationStatus(candidate.applicationStatus);
+                        const statusLabel = getApplicationStatusLabel(status);
                         return (
                             <motion.div
                                 key={candidate._id}
@@ -102,7 +118,23 @@ export function JobCandidates() {
                                         <div className="flex-1">
                                             <div className="flex items-start justify-between mb-2">
                                                 <div>
-                                                    <h3 className="text-lg font-bold text-slate-900">{candidate.name}</h3>
+                                                    <div className="flex items-center gap-2">
+                                                        <h3 className="text-lg font-bold text-slate-900">{candidate.name}</h3>
+                                                        <Badge
+                                                            className={`text-[10px] uppercase tracking-wide font-black ${status === 'accepted'
+                                                                ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                                                : status === 'rejected'
+                                                                    ? 'bg-red-100 text-red-700 border-red-200'
+                                                                    : status === 'shortlisted'
+                                                                        ? 'bg-blue-100 text-blue-700 border-blue-200'
+                                                                        : status === 'reviewing'
+                                                                            ? 'bg-yellow-100 text-yellow-700 border-yellow-200'
+                                                                            : 'bg-slate-100 text-slate-700 border-slate-200'
+                                                                }`}
+                                                        >
+                                                            {statusLabel}
+                                                        </Badge>
+                                                    </div>
                                                     <div className="flex items-center gap-2 text-sm text-slate-500">
                                                         <Mail className="w-3 h-3" />
                                                         {candidate.email}
