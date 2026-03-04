@@ -1,9 +1,10 @@
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 // Application API
 export const getApplications = async () => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`http://localhost:5000/api/applications`, {
+        const response = await fetch(`${API_URL}/applications`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -20,7 +21,7 @@ export const getApplications = async () => {
 export const createApplication = async (applicationData) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`http://localhost:5000/api/applications`, {
+        const response = await fetch(`${API_URL}/applications`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -44,7 +45,7 @@ export const createApplication = async (applicationData) => {
 export const deleteApplication = async (id) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`http://localhost:5000/api/applications/${id}`, {
+        const response = await fetch(`${API_URL}/applications/${id}`, {
             method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -66,7 +67,7 @@ export const deleteApplication = async (id) => {
 export const approveApplication = async (id) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`http://localhost:5000/api/applications/${id}/approve`, {
+        const response = await fetch(`${API_URL}/applications/${id}/approve`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -89,7 +90,7 @@ export const approveApplication = async (id) => {
 export const rejectApplication = async (id, reason) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`http://localhost:5000/api/applications/${id}/reject`, {
+        const response = await fetch(`${API_URL}/applications/${id}/reject`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
