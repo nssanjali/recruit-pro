@@ -26,7 +26,6 @@ export function CandidateDashboard({ user }) {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [jobType, setJobType] = useState('all');
-    const [filter, setFilter] = useState('all');
     const [appStatus, setAppStatus] = useState('all');
     const [fitOnly, setFitOnly] = useState(false);
     const [roleFitLoading, setRoleFitLoading] = useState(false);
@@ -98,14 +97,12 @@ export function CandidateDashboard({ user }) {
             );
         }
         if (jobType !== 'all') list = list.filter((job) => job.jobType === jobType);
-        if (filter === 'applied') list = list.filter((job) => latestApplicationByJob.has(String(job._id)));
-        if (filter === 'not_applied') list = list.filter((job) => !latestApplicationByJob.has(String(job._id)));
         if (fitOnly && roleFitData?.recommendedJobIds?.length > 0) {
             const fitSet = new Set(roleFitData.recommendedJobIds.map((id) => String(id)));
             list = list.filter((job) => fitSet.has(String(job._id)));
         }
         return list;
-    }, [jobs, search, jobType, filter, latestApplicationByJob, fitOnly, roleFitData]);
+    }, [jobs, search, jobType, fitOnly, roleFitData]);
 
     const filteredApplications = useMemo(() => {
         let list = [...applications];
@@ -300,9 +297,6 @@ export function CandidateDashboard({ user }) {
 
                         <TabsContent value="discover" className="space-y-4 mt-4">
                             <div className="flex gap-2 flex-wrap">
-                                <Button size="sm" variant={filter === 'all' ? 'default' : 'outline'} onClick={() => setFilter('all')}>All</Button>
-                                <Button size="sm" variant={filter === 'not_applied' ? 'default' : 'outline'} onClick={() => setFilter('not_applied')}>Not Applied</Button>
-                                <Button size="sm" variant={filter === 'applied' ? 'default' : 'outline'} onClick={() => setFilter('applied')}>Applied</Button>
                                 <Button
                                     size="sm"
                                     variant={fitOnly ? 'default' : 'outline'}
@@ -363,18 +357,32 @@ export function CandidateDashboard({ user }) {
                                 <p className="text-slate-500">No applications found.</p>
                             ) : (
                                 <div className="space-y-3">
-                                    {filteredApplications.map((app) => (
-                                        <div key={app._id} className="rounded-xl border border-slate-200 p-4 bg-white flex items-center justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <p className="font-bold text-slate-900">{app.job?.title || 'Job'}</p>
-                                                <p className="text-sm text-slate-500">{app.job?.company || 'Company'} | {app.job?.location || 'Location'}</p>
+                                    {filteredApplications.map((app) => {
+                                        const jobStatus = app.job?.status || 'unknown';
+                                        const isJobClosed = jobStatus === 'closed' || jobStatus === 'filled';
+                                        return (
+                                            <div key={app._id} className="rounded-xl border border-slate-200 p-4 bg-white">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <p className="font-bold text-slate-900">{app.job?.title || 'Job'}</p>
+                                                            {isJobClosed && (
+                                                                <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px]">
+                                                                    Job {jobStatus}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-sm text-slate-500 mt-1">{app.job?.company || 'Company'} | {app.job?.location || 'Location'}</p>
+                                                        <p className="text-xs text-slate-400 mt-1">Applied {new Date(app.appliedAt || app.createdAt).toLocaleDateString()}</p>
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-2">
+                                                        <Badge className="capitalize bg-slate-100 text-slate-700 border-slate-200">{getApplicationStatusLabel(app.status)}</Badge>
+                                                        <Button size="sm" variant="outline" onClick={() => navigate(`/jobs/${app.job?._id || app.jobId}`)}>View Job</Button>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <Badge className="capitalize bg-slate-100 text-slate-700 border-slate-200">{getApplicationStatusLabel(app.status)}</Badge>
-                                                <Button variant="outline" onClick={() => navigate(`/jobs/${app.job?._id || app.jobId}`)}>View Job</Button>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </TabsContent>
