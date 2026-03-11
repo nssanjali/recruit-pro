@@ -9,6 +9,7 @@ import {
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { DynamicFormField } from './DynamicFormField';
+import { SecureResumeViewer } from './SecureResumeViewer';
 
 export function JobDetails({ user }) {
     const { id } = useParams();
@@ -19,7 +20,6 @@ export function JobDetails({ user }) {
     const [submitting, setSubmitting] = useState(false);
     const [applied, setApplied] = useState(false);
     const [uploadingResume, setUploadingResume] = useState(false);
-    const [openingResume, setOpeningResume] = useState(false);
     const applicationFormRef = useRef(null);
 
     // Reliability restriction check (read from user prop)
@@ -87,16 +87,16 @@ export function JobDetails({ user }) {
 
         setUploadingResume(true);
         try {
-            toast.info('Uploading resume...');
-            const url = await uploadFile(file, 'resume');
-            setFormData(prev => ({ ...prev, resume: url }));
+            toast.info('Uploading resume securely...');
+            const publicId = await uploadFile(file, 'resume');
+            setFormData(prev => ({ ...prev, resume: publicId }));
             setFormErrors(prev => {
                 const next = { ...prev };
                 delete next.resume;
                 return next;
             });
-            await updateUserDetails({ resume: url });
-            toast.success('Resume uploaded successfully!');
+            await updateUserDetails({ resume: publicId });
+            toast.success('Resume uploaded securely!');
         } catch (error) {
             console.error('Upload error:', error);
             toast.error('Failed to upload resume');
@@ -451,25 +451,13 @@ export function JobDetails({ user }) {
                                                         )}
                                                     </Button>
                                                     {formData.resume && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={async () => {
-                                                                try {
-                                                                    setOpeningResume(true);
-                                                                    const signedUrl = await getMySecureResumeUrl();
-                                                                    window.open(signedUrl, '_blank', 'noopener,noreferrer');
-                                                                } catch (error) {
-                                                                    toast.error(error.message || 'Failed to open resume');
-                                                                } finally {
-                                                                    setOpeningResume(false);
-                                                                }
-                                                            }}
-                                                            disabled={openingResume}
-                                                            className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1 disabled:opacity-60"
-                                                        >
-                                                            <FileText className="w-4 h-4" />
-                                                            {openingResume ? 'Opening resume...' : 'View uploaded resume'}
-                                                        </button>
+                                                        <SecureResumeViewer
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            useMyResume={true}
+                                                            className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1 p-0 h-auto"
+                                                            showSecurityBadge={false}
+                                                        />
                                                     )}
                                                 </div>
                                                 {formErrors.resume && <p className="text-xs text-red-600">{formErrors.resume}</p>}

@@ -50,7 +50,7 @@ router.post('/', protect, uploadWithErrorHandling(upload.single('file')), (req, 
     }
 });
 
-// Specific upload route for resumes (temporarily public)
+// Specific upload route for resumes (PRIVATE with authenticated storage)
 router.post('/resume', uploadWithErrorHandling(upload.single('resume')), (req, res) => {
     try {
         if (!req.file) {
@@ -61,21 +61,23 @@ router.post('/resume', uploadWithErrorHandling(upload.single('resume')), (req, r
         }
 
         // Log the file details for debugging
-        console.log('✅ Resume uploaded successfully');
-        console.log('  URL:', req.file.path);
+        console.log('✅ Resume uploaded successfully (PRIVATE)');
         console.log('  Public ID:', req.file.filename);
         console.log('  Original name:', req.file.originalname);
+        console.log('  Storage type: authenticated (private)');
 
-        const previewUrl = generateSignedUrl(req.file.filename, 'image', 300, 'upload');
+        // Generate a short-lived signed URL for immediate preview (5 minutes)
+        const previewUrl = generateSignedUrl(req.file.filename, 'raw', 300, 'authenticated');
 
         res.status(200).json({
             success: true,
             data: {
-                url: req.file.path,
-                previewUrl,
+                publicId: req.file.filename,  // Store public ID, not URL
+                previewUrl,                    // Short-lived preview URL
                 name: req.file.originalname,
                 filename: req.file.filename,
-                format: req.file.format
+                format: req.file.format,
+                message: 'Resume stored securely. Access requires authentication.'
             }
         });
     } catch (error) {

@@ -35,8 +35,8 @@ const storage = new CloudinaryStorage({
 
         if (file.fieldname === 'resume') {
             folder = 'recruitpro/resumes';
-            resource_type = 'image';        // PDFs are stored as 'image' type in Cloudinary
-            type = 'upload';                // Temporarily public delivery
+            resource_type = 'raw';          // Use 'raw' for PDFs to maintain file integrity
+            type = 'authenticated';         // PRIVATE: Requires signed URLs for access
         } else if (file.fieldname === 'avatar') {
             folder = 'recruitpro/avatars';
             resource_type = 'image';
@@ -89,12 +89,12 @@ const isAllowedResumeReference = (value = '') => {
  *
  * @param {string} publicId - Cloudinary public ID (with or without extension)
  * @param {string} resourceType - Cloudinary resource type ('image', 'raw', 'video')
- * @param {number} expirySeconds - How long the URL is valid (default 1 hour)
+ * @param {number} expirySeconds - How long the URL is valid (default 5 minutes)
  */
 const generateSignedUrl = (
     publicId,
     resourceType = 'image',
-    expirySeconds = 3600,
+    expirySeconds = 300, // Default 5 minutes for security
     deliveryType = 'upload',
     version = null
 ) => {
@@ -194,7 +194,7 @@ const canAccessSignedUrl = async (url) => {
     }
 };
 
-const resolveSignedResumeUrl = async (resumeRef, expirySeconds = 3600) => {
+const resolveSignedResumeUrl = async (resumeRef, expirySeconds = 300) => {
     if (!resumeRef || !isAllowedResumeReference(resumeRef)) return null;
 
     const extractedPublicId = extractPublicIdFromUrl(resumeRef) || String(resumeRef).trim();
@@ -205,15 +205,17 @@ const resolveSignedResumeUrl = async (resumeRef, expirySeconds = 3600) => {
         extractedPublicId.replace(/\.[^/.]+$/, '')
     ].filter(Boolean)));
 
+    // For authenticated storage, prioritize 'authenticated' type
     const ref = String(resumeRef || '');
-    const preferredType = ref.includes('/upload/') ? 'upload' : ref.includes('/authenticated/') ? 'authenticated' : 'upload';
+    const preferredType = ref.includes('/authenticated/') ? 'authenticated' : ref.includes('/upload/') ? 'upload' : 'authenticated';
     const secondaryType = preferredType === 'authenticated' ? 'upload' : 'authenticated';
 
+    // Try 'raw' resource type first for PDFs, then 'image' as fallback
     const candidates = [
-        { resourceType: 'image', deliveryType: preferredType },
         { resourceType: 'raw', deliveryType: preferredType },
-        { resourceType: 'image', deliveryType: secondaryType },
-        { resourceType: 'raw', deliveryType: secondaryType }
+        { resourceType: 'image', deliveryType: preferredType },
+        { resourceType: 'raw', deliveryType: secondaryType },
+        { resourceType: 'image', deliveryType: secondaryType }
     ];
     let fallbackResolved = null;
 

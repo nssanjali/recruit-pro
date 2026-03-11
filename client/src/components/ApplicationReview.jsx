@@ -39,6 +39,7 @@ import {
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { getApplicationStatusLabel, normalizeApplicationStatus } from '../lib/applicationStatus';
+import { SecureResumeViewer } from './SecureResumeViewer';
 
 export function ApplicationReview() {
     const { id } = useParams();
@@ -54,7 +55,6 @@ export function ApplicationReview() {
     const [transcriptFile, setTranscriptFile] = useState(null);
     const [transcriptText, setTranscriptText] = useState('');
     const [insightMode, setInsightMode] = useState('strengths');
-    const [resumeLoading, setResumeLoading] = useState(false);
 
     const currentUserRole = (() => {
         try {
@@ -604,40 +604,11 @@ export function ApplicationReview() {
                                         <FileText className="w-5 h-5 text-blue-600" />
                                         Resume
                                     </h4>
-                                    <button
-                                        type="button"
-                                        disabled={resumeLoading}
-                                        onClick={async () => {
-                                            try {
-                                                setResumeLoading(true);
-                                                const signedUrl = await getSecureResumeUrl(id);
-                                                window.open(signedUrl, '_blank', 'noopener,noreferrer');
-                                            } catch (err) {
-                                                toast.error(err.message || 'Could not open resume');
-                                            } finally {
-                                                setResumeLoading(false);
-                                            }
-                                        }}
-                                        className="w-full flex items-center justify-between p-4 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors group disabled:opacity-60 disabled:cursor-not-allowed"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center">
-                                                <FileText className="w-6 h-6 text-white" />
-                                            </div>
-                                            <div className="text-left">
-                                                <p className="font-bold text-blue-900">Resume.pdf</p>
-                                                <p className="text-xs text-blue-600 flex items-center gap-1">
-                                                    <Lock className="w-3 h-3" />
-                                                    {resumeLoading ? 'Generating secure link...' : 'Secure access — click to view'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        {resumeLoading ? (
-                                            <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                                        ) : (
-                                            <Download className="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" />
-                                        )}
-                                    </button>
+                                    <SecureResumeViewer
+                                        variant="card"
+                                        applicationId={id}
+                                        label="Resume.pdf"
+                                    />
                                 </div>
                             )}
                         </CardContent>

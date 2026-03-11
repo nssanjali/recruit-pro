@@ -931,12 +931,11 @@ export const getSecureResumeUrl = async (req, res) => {
             });
         }
 
-        const EXPIRY_SECONDS = 3600;
-        let finalUrl = toPublicResumeUrl(resumeUrl);
-        if (!finalUrl) {
-            const resolved = await resolveSignedResumeUrl(resumeUrl, EXPIRY_SECONDS);
-            finalUrl = resolved?.url || '';
-        }
+        const EXPIRY_SECONDS = 300; // 5 minutes for security
+        let finalUrl = '';
+        const resolved = await resolveSignedResumeUrl(resumeUrl, EXPIRY_SECONDS);
+        finalUrl = resolved?.url || '';
+        
         if (!finalUrl) {
             return res.status(500).json({ success: false, message: 'Could not generate resume URL' });
         }
@@ -944,12 +943,12 @@ export const getSecureResumeUrl = async (req, res) => {
         const actor = req.user
             ? `${req.user._id} (${req.user.role})`
             : 'public-request';
-        console.log(`🔒 Secure resume URL generated for application ${req.params.id} by ${actor}`);
+        console.log(`🔒 Secure resume URL generated for application ${req.params.id} by ${actor} - expires in ${EXPIRY_SECONDS}s`);
 
         return res.status(200).json({
             success: true,
             url: finalUrl,
-            expiresIn: EXPIRY_SECONDS
+            expiresIn: EXPIRY_SECONDS // Let frontend know when it expires
         });
     } catch (error) {
         console.error('Error generating secure resume URL:', error);

@@ -143,12 +143,12 @@ export function CandidateDashboard({ user }) {
     const handleResumeUpload = async (file) => {
         if (!file) return;
         try {
-            toast.info('Uploading resume...');
-            const resumeUrl = await uploadFile(file, 'resume');
-            setUploadedResumeUrl(resumeUrl);
-            setActiveResumeUrl(resumeUrl);
-            toast.success('Resume uploaded. Running role-fit analysis...');
-            await runRoleFitAnalysis(resumeUrl);
+            toast.info('Uploading resume securely...');
+            const resumePublicId = await uploadFile(file, 'resume');
+            setUploadedResumeUrl(resumePublicId);
+            setActiveResumeUrl(resumePublicId);
+            toast.success('Resume uploaded securely. Running role-fit analysis...');
+            await runRoleFitAnalysis(resumePublicId);
         } catch (error) {
             toast.error(error.message || 'Failed to upload resume');
         }
@@ -161,7 +161,7 @@ export function CandidateDashboard({ user }) {
             await updateUserDetails({ resume: uploadedResumeUrl });
             const existingUser = JSON.parse(localStorage.getItem('user') || '{}');
             localStorage.setItem('user', JSON.stringify({ ...existingUser, resume: uploadedResumeUrl }));
-            toast.success('Uploaded resume saved to profile');
+            toast.success('Resume saved securely to profile');
         } catch (error) {
             toast.error(error.message || 'Failed to save resume to profile');
         } finally {

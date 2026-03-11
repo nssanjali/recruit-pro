@@ -36,6 +36,7 @@ import {
 } from './ui';
 import { motion, AnimatePresence } from 'motion/react';
 import { getMySecureResumeUrl, updateUserDetails, uploadFile } from '../lib/api';
+import { SecureResumeViewer } from './SecureResumeViewer';
 
 export function ProfileSettings({ user, onUpdate }) {
     const [loading, setLoading] = useState(false);
@@ -44,7 +45,6 @@ export function ProfileSettings({ user, onUpdate }) {
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [uploadingResume, setUploadingResume] = useState(false);
     const [uploadingBanner, setUploadingBanner] = useState(false);
-    const [viewingResume, setViewingResume] = useState(false);
     const [formData, setFormData] = useState({
         name: user?.name || '',
         email: user?.email || '',
@@ -109,13 +109,16 @@ export function ProfileSettings({ user, onUpdate }) {
 
         const isAvatar = type === 'avatar';
         const isBanner = type === 'banner';
+        const isResume = type === 'resume';
         isAvatar ? setUploadingAvatar(true) : isBanner ? setUploadingBanner(true) : setUploadingResume(true);
         setError('');
 
         try {
-            const url = await uploadFile(file, type);
+            const result = await uploadFile(file, type);
+            // For resumes, uploadFile returns publicId; for others, it returns URL
+            const value = isResume ? result : result;
             const fieldName = isBanner ? 'companyBanner' : type;
-            setFormData(prev => ({ ...prev, [fieldName]: url }));
+            setFormData(prev => ({ ...prev, [fieldName]: value }));
 
             // Automatically save the profile when avatar, banner, or resume is uploaded
             let payload = {};
@@ -129,14 +132,14 @@ export function ProfileSettings({ user, onUpdate }) {
                         companySize: formData.companySize,
                         location: formData.companyLocation,
                         description: formData.companyDescription,
-                        companyBanner: url
+                        companyBanner: value
                     }
                 };
             } else {
-                payload = { [type]: url };
+                payload = { [type]: value };
             }
-            const result = await updateUserDetails(payload);
-            if (onUpdate) onUpdate(result.data);
+            const updateResult = await updateUserDetails(payload);
+            if (onUpdate) onUpdate(updateResult.data);
 
             setSuccess(true);
             setTimeout(() => setSuccess(false), 3000);
@@ -744,24 +747,13 @@ export function ProfileSettings({ user, onUpdate }) {
                                                                         </div>
                                                                     </div>
                                                                     <div className="flex items-center gap-2">
-                                                                        <button
-                                                                            type="button"
-                                                                            disabled={viewingResume}
-                                                                            onClick={async () => {
-                                                                                try {
-                                                                                    setViewingResume(true);
-                                                                                    const signedUrl = await getMySecureResumeUrl();
-                                                                                    window.open(signedUrl, '_blank', 'noopener,noreferrer');
-                                                                                } catch (err) {
-                                                                                    setError(err.message || 'Failed to open resume');
-                                                                                } finally {
-                                                                                    setViewingResume(false);
-                                                                                }
-                                                                            }}
-                                                                            className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-all disabled:opacity-60"
-                                                                        >
-                                                                            {viewingResume ? 'Opening...' : 'View'}
-                                                                        </button>
+                                                                        <SecureResumeViewer
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            useMyResume={true}
+                                                                            className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-all"
+                                                                            showSecurityBadge={false}
+                                                                        />
                                                                         <label className="px-4 py-2 bg-[#4285f4] hover:bg-[#3b79db] text-white text-xs font-bold rounded-xl cursor-pointer transition-all">
                                                                             {uploadingResume ? 'Uploading...' : 'Replace'}
                                                                             <input

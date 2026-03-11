@@ -388,7 +388,9 @@ export const ScrollBar = React.forwardRef(
 );
 ScrollBar.displayName = ScrollAreaPrimitive.ScrollAreaScrollbar.displayName;
 
-// Toaster Component (simple placeholder for toast notifications)
+// Toaster Component using Sonner
+import { Toaster as SonnerToaster } from 'sonner';
+
 export const Toaster = () => {
-    return null; // Can be replaced with a proper toast library like sonner or react-hot-toast
+    return <SonnerToaster position="top-right" richColors />;
 };

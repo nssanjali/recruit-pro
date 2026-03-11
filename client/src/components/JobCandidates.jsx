@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getJobCandidates, getJob, getSecureResumeUrl } from '../lib/api';
 import { Card, Button, Badge, Progress } from './ui';
 import { Bot, Sparkles, User, FileText, ArrowLeft, Mail, Eye, Briefcase, Lock } from 'lucide-react';
+import { SecureResumeViewer } from './SecureResumeViewer';
 import { motion } from 'motion/react';
 import { getApplicationStatusLabel, normalizeApplicationStatus } from '../lib/applicationStatus';
 import { toast } from 'sonner';
@@ -16,8 +17,6 @@ export function JobCandidates() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [includeMatchAnalysis, setIncludeMatchAnalysis] = useState(false);
-    // Track resume loading per application to avoid double-clicks
-    const [resumeLoading, setResumeLoading] = useState({});
 
     useEffect(() => {
         const fetchData = async () => {
@@ -169,30 +168,12 @@ export function JobCandidates() {
 
                                             <div className="flex items-center gap-3 mt-4">
                                                 {candidate.resume && (
-                                                    <Button
+                                                    <SecureResumeViewer
                                                         variant="outline"
                                                         size="sm"
-                                                        disabled={!!resumeLoading[candidate.applicationId]}
-                                                        onClick={async () => {
-                                                            try {
-                                                                setResumeLoading(prev => ({ ...prev, [candidate.applicationId]: true }));
-                                                                const signedUrl = await getSecureResumeUrl(candidate.applicationId);
-                                                                window.open(signedUrl, '_blank', 'noopener,noreferrer');
-                                                            } catch (err) {
-                                                                toast.error(err.message || 'Could not open resume');
-                                                            } finally {
-                                                                setResumeLoading(prev => ({ ...prev, [candidate.applicationId]: false }));
-                                                            }
-                                                        }}
-                                                    >
-                                                        {resumeLoading[candidate.applicationId] ? (
-                                                            <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin mr-2" />
-                                                        ) : (
-                                                            <FileText className="w-4 h-4 mr-2" />
-                                                        )}
-                                                        <Lock className="w-3 h-3 mr-1 text-slate-400" />
-                                                        {resumeLoading[candidate.applicationId] ? 'Loading...' : 'View Resume'}
-                                                    </Button>
+                                                        applicationId={candidate.applicationId}
+                                                        showSecurityBadge={true}
+                                                    />
                                                 )}
                                                 <Button
                                                     size="sm"

@@ -20,6 +20,7 @@ import userRoutes from './routes/userRoutes.js';
 import communicationRoutes from './routes/communicationRoutes.js';
 import recruiterRoutes from './routes/recruiterRoutes.js';
 import calendarRoutes from './routes/calendarRoutes.js';
+import proxyRoutes from './routes/proxyRoutes.js';
 
 import { initializeCronJobs } from './services/cronService.js';
 
@@ -77,6 +78,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/communications', communicationRoutes);
 app.use('/api/recruiters', recruiterRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/proxy', proxyRoutes);
 
 // Health / root endpoint
 app.get('/', (req, res) => {

@@ -649,6 +649,18 @@ export const getSecureResumeUrl = async (applicationId) => {
     }
 };
 
+// Get proxy URL for secure resume viewing (bypasses CORS issues)
+export const getProxyResumeUrl = (applicationId) => {
+    const token = localStorage.getItem('token');
+    return `${API_URL}/proxy/resume/${applicationId}?token=${token}`;
+};
+
+// Get proxy URL for user's own resume
+export const getMyProxyResumeUrl = () => {
+    const token = localStorage.getItem('token');
+    return `${API_URL}/proxy/my-resume?token=${token}`;
+};
+
 export const uploadFile = async (file, type = 'file') => {
     try {
         const token = localStorage.getItem('token');
@@ -669,6 +681,13 @@ export const uploadFile = async (file, type = 'file') => {
         }
 
         const result = await response.json();
+        
+        // For resumes (private storage), return publicId instead of URL
+        if (type === 'resume' && result.data.publicId) {
+            return result.data.publicId;
+        }
+        
+        // For other files (public storage), return URL
         return result.data.url;
     } catch (error) {
         console.error('API Error:', error);

@@ -256,11 +256,10 @@ export const getMySecureResumeUrl = async (req, res) => {
             });
         }
 
-        let finalUrl = toPublicResumeUrl(resumeRef);
-        if (!finalUrl) {
-            const resolved = await resolveSignedResumeUrl(resumeRef, 300);
-            finalUrl = resolved?.url || '';
-        }
+        let finalUrl = '';
+        const resolved = await resolveSignedResumeUrl(resumeRef, 300);
+        finalUrl = resolved?.url || '';
+        
         if (!finalUrl) {
             return res.status(500).json({
                 success: false,
@@ -268,10 +267,12 @@ export const getMySecureResumeUrl = async (req, res) => {
             });
         }
 
+        console.log(`🔒 User ${req.user._id} accessed their own resume - expires in 300s`);
+
         return res.status(200).json({
             success: true,
             url: finalUrl,
-            expiresIn: 300
+            expiresIn: 300 // Let frontend know when it expires
         });
     } catch (error) {
         return res.status(500).json({
