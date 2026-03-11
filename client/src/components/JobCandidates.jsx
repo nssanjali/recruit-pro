@@ -1,11 +1,12 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getJobCandidates, getJob } from '../lib/api';
+import { getJobCandidates, getJob, getSecureResumeUrl } from '../lib/api';
 import { Card, Button, Badge, Progress } from './ui';
-import { Bot, Sparkles, User, FileText, ArrowLeft, Mail, Eye, Briefcase } from 'lucide-react';
+import { Bot, Sparkles, User, FileText, ArrowLeft, Mail, Eye, Briefcase, Lock } from 'lucide-react';
 import { motion } from 'motion/react';
 import { getApplicationStatusLabel, normalizeApplicationStatus } from '../lib/applicationStatus';
+import { toast } from 'sonner';
 
 export function JobCandidates() {
     const { id } = useParams(); // Job ID
@@ -15,6 +16,8 @@ export function JobCandidates() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [includeMatchAnalysis, setIncludeMatchAnalysis] = useState(false);
+    // Track resume loading per application to avoid double-clicks
+    const [resumeLoading, setResumeLoading] = useState({});
 
     useEffect(() => {
         const fetchData = async () => {
@@ -95,7 +98,11 @@ export function JobCandidates() {
                     </Card>
                 ) : (
                     candidates.map((candidate, index) => {
-                        const score = Number(candidate.finalScore ?? candidate.matchScore ?? 0);
+                        const ultimateScore = Number(candidate.ultimateAverageScore);
+                        const hasUltimateScore = Number.isFinite(ultimateScore);
+                        const score = hasUltimateScore
+                            ? ultimateScore
+                            : Number(candidate.finalScore ?? candidate.matchScore ?? 0);
                         const status = candidate.applicationStatusNormalized || normalizeApplicationStatus(candidate.applicationStatus);
                         const statusLabel = getApplicationStatusLabel(status);
                         return (
@@ -151,15 +158,40 @@ export function JobCandidates() {
                                                             </Badge>
                                                         </div>
                                                         <Progress value={score} className="w-32 h-2 ml-auto" />
+                                                        {hasUltimateScore && (
+                                                            <p className="text-[11px] font-semibold text-emerald-700 mt-1">
+                                                                Ultimate Average
+                                                            </p>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
 
                                             <div className="flex items-center gap-3 mt-4">
                                                 {candidate.resume && (
-                                                    <Button variant="outline" size="sm" onClick={() => window.open(candidate.resume, '_blank')}>
-                                                        <FileText className="w-4 h-4 mr-2" />
-                                                        View Resume
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        disabled={!!resumeLoading[candidate.applicationId]}
+                                                        onClick={async () => {
+                                                            try {
+                                                                setResumeLoading(prev => ({ ...prev, [candidate.applicationId]: true }));
+                                                                const signedUrl = await getSecureResumeUrl(candidate.applicationId);
+                                                                window.open(signedUrl, '_blank', 'noopener,noreferrer');
+                                                            } catch (err) {
+                                                                toast.error(err.message || 'Could not open resume');
+                                                            } finally {
+                                                                setResumeLoading(prev => ({ ...prev, [candidate.applicationId]: false }));
+                                                            }
+                                                        }}
+                                                    >
+                                                        {resumeLoading[candidate.applicationId] ? (
+                                                            <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin mr-2" />
+                                                        ) : (
+                                                            <FileText className="w-4 h-4 mr-2" />
+                                                        )}
+                                                        <Lock className="w-3 h-3 mr-1 text-slate-400" />
+                                                        {resumeLoading[candidate.applicationId] ? 'Loading...' : 'View Resume'}
                                                     </Button>
                                                 )}
                                                 <Button

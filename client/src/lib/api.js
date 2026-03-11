@@ -1,10 +1,25 @@
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
+const apiFetch = async (url, options = {}) => {
+    try {
+        return await fetch(url, options);
+    } catch (error) {
+        console.error('[API Network Error]', {
+            url,
+            method: options.method || 'GET',
+            apiBase: API_URL,
+            message: error?.message || 'Unknown network error',
+            hint: 'Verify backend server is running and VITE_API_URL is correct'
+        });
+        throw error;
+    }
+};
+
 // Interview API
 export const scheduleInterview = async (interviewData) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/interviews/schedule`, {
+        const response = await apiFetch(`${API_URL}/interviews/schedule`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -26,7 +41,7 @@ export const scheduleInterview = async (interviewData) => {
 
 export const getInterviews = async () => {
     try {
-        const response = await fetch(`${API_URL}/interviews`);
+        const response = await apiFetch(`${API_URL}/interviews`);
 
         if (!response.ok) {
             throw new Error('Failed to fetch interviews');
@@ -42,7 +57,7 @@ export const getInterviews = async () => {
 // Recruiter Assignment API
 export const getAssignments = async () => {
     try {
-        const response = await fetch(`${API_URL}/assignments`);
+        const response = await apiFetch(`${API_URL}/assignments`);
 
         if (!response.ok) {
             throw new Error('Failed to fetch assignments');
@@ -57,7 +72,7 @@ export const getAssignments = async () => {
 
 export const createAssignment = async (assignmentData) => {
     try {
-        const response = await fetch(`${API_URL}/assignments`, {
+        const response = await apiFetch(`${API_URL}/assignments`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -78,7 +93,7 @@ export const createAssignment = async (assignmentData) => {
 
 export const assignRecruiter = async (assignmentId) => {
     try {
-        const response = await fetch(`${API_URL}/assignments/${assignmentId}/assign`, {
+        const response = await apiFetch(`${API_URL}/assignments/${assignmentId}/assign`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -99,7 +114,7 @@ export const assignRecruiter = async (assignmentId) => {
 // Scheduling Queue API
 export const getQueueItems = async () => {
     try {
-        const response = await fetch(`${API_URL}/queue`);
+        const response = await apiFetch(`${API_URL}/queue`);
 
         if (!response.ok) {
             throw new Error('Failed to fetch queue items');
@@ -114,7 +129,7 @@ export const getQueueItems = async () => {
 
 export const createQueueItem = async (queueData) => {
     try {
-        const response = await fetch(`${API_URL}/queue`, {
+        const response = await apiFetch(`${API_URL}/queue`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -135,7 +150,7 @@ export const createQueueItem = async (queueData) => {
 
 export const deleteQueueItem = async (queueId) => {
     try {
-        const response = await fetch(`${API_URL}/queue/${queueId}`, {
+        const response = await apiFetch(`${API_URL}/queue/${queueId}`, {
             method: 'DELETE',
         });
 
@@ -156,7 +171,7 @@ export const getJobs = async () => {
         const token = localStorage.getItem('token');
         const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-        const response = await fetch(`${API_URL}/jobs`, {
+        const response = await apiFetch(`${API_URL}/jobs`, {
             headers
         });
 
@@ -169,9 +184,32 @@ export const getJobs = async () => {
     }
 };
 
+export const analyzeCandidateRoleFit = async (payload = {}) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await apiFetch(`${API_URL}/jobs/role-fit/analyze`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(result.message || 'Failed to analyze role fit');
+        }
+        return result.data;
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
 export const getJob = async (id) => {
     try {
-        const response = await fetch(`${API_URL}/jobs/${id}`);
+        const response = await apiFetch(`${API_URL}/jobs/${id}`);
         if (!response.ok) throw new Error('Failed to fetch job');
         const result = await response.json();
         return result.data;
@@ -184,7 +222,7 @@ export const getJob = async (id) => {
 export const createJob = async (jobData) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/jobs`, {
+        const response = await apiFetch(`${API_URL}/jobs`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -208,7 +246,7 @@ export const createJob = async (jobData) => {
 export const getJobById = async (id) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/jobs/${id}`, {
+        const response = await apiFetch(`${API_URL}/jobs/${id}`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -226,7 +264,7 @@ export const getJobById = async (id) => {
 export const updateJob = async (id, jobData) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/jobs/${id}`, {
+        const response = await apiFetch(`${API_URL}/jobs/${id}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -250,7 +288,7 @@ export const updateJob = async (id, jobData) => {
 export const deleteJob = async (id) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/jobs/${id}`, {
+        const response = await apiFetch(`${API_URL}/jobs/${id}`, {
             method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -272,7 +310,7 @@ export const deleteJob = async (id) => {
 export const retryFailedSchedules = async () => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/jobs/retry-scheduling`, {
+        const response = await apiFetch(`${API_URL}/jobs/retry-scheduling`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -293,7 +331,7 @@ export const retryFailedSchedules = async () => {
 export const getMappedRecruiters = async (jobId) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/jobs/${jobId}/mapped-recruiters`, {
+        const response = await apiFetch(`${API_URL}/jobs/${jobId}/mapped-recruiters`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -312,7 +350,7 @@ export const getMappedRecruiters = async (jobId) => {
 export const getJobInterviews = async (jobId) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/interviews/job/${jobId}`, {
+        const response = await apiFetch(`${API_URL}/interviews/job/${jobId}`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -331,7 +369,7 @@ export const getJobInterviews = async (jobId) => {
 export const getAdminCalendarData = async () => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/calendar/data/admin`, {
+        const response = await apiFetch(`${API_URL}/calendar/data/admin`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -350,7 +388,7 @@ export const getAdminCalendarData = async () => {
 export const getJobCandidates = async (id) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/jobs/${id}/candidates`, {
+        const response = await apiFetch(`${API_URL}/jobs/${id}/candidates`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -371,7 +409,7 @@ export const getJobCandidates = async (id) => {
 export const applyJob = async (jobId, applicationData = {}) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/jobs/${jobId}/apply`, {
+        const response = await apiFetch(`${API_URL}/jobs/${jobId}/apply`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -395,7 +433,7 @@ export const applyJob = async (jobId, applicationData = {}) => {
 export const getApplications = async () => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/applications`, {
+        const response = await apiFetch(`${API_URL}/applications`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -413,7 +451,7 @@ export const getApplications = async () => {
 export const getApplicationById = async (id) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/applications/${id}`, {
+        const response = await apiFetch(`${API_URL}/applications/${id}`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -430,7 +468,7 @@ export const getApplicationById = async (id) => {
 export const updateApplicationStatus = async (id, data) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/applications/${id}/status`, {
+        const response = await apiFetch(`${API_URL}/applications/${id}/status`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -450,7 +488,7 @@ export const updateApplicationStatus = async (id, data) => {
 // [DEV] Force Gemini re-analysis — clears cache and re-runs evaluation
 export const reanalyzeApplication = async (id) => {
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/applications/${id}/reanalyze`, {
+    const response = await apiFetch(`${API_URL}/applications/${id}/reanalyze`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -463,7 +501,7 @@ export const reanalyzeApplication = async (id) => {
 
 export const submitInterviewReview = async (interviewId, payload) => {
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/interviews/${interviewId}/review-feedback`, {
+    const response = await apiFetch(`${API_URL}/interviews/${interviewId}/review-feedback`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -478,11 +516,28 @@ export const submitInterviewReview = async (interviewId, payload) => {
     return result;
 };
 
+export const markInterviewAttendance = async (interviewId, payload) => {
+    const token = localStorage.getItem('token');
+    const response = await apiFetch(`${API_URL}/interviews/${interviewId}/attendance`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(result.message || 'Failed to mark interview attendance');
+    }
+    return result;
+};
+
 
 export const checkJobMatch = async (jobId) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/jobs/${jobId}/check-match`, {
+        const response = await apiFetch(`${API_URL}/jobs/${jobId}/check-match`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -506,7 +561,7 @@ export const getCurrentUser = async () => {
         const token = localStorage.getItem('token');
         if (!token) return null;
 
-        const response = await fetch(`${API_URL}/auth/me`, {
+        const response = await apiFetch(`${API_URL}/auth/me`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -526,10 +581,30 @@ export const getCurrentUser = async () => {
     }
 };
 
+export const getMySecureResumeUrl = async () => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await apiFetch(`${API_URL}/auth/me/resume-url`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(result.message || 'Failed to get secure resume URL');
+        }
+        return result.url;
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+};
+
 export const updateUserDetails = async (userData) => {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/auth/updatedetails`, {
+        const response = await apiFetch(`${API_URL}/auth/updatedetails`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -550,13 +625,37 @@ export const updateUserDetails = async (userData) => {
     }
 };
 
+// Fetch a short-lived signed URL for a resume — requires auth token
+// The server validates that the requester is allowed to view this resume
+export const getSecureResumeUrl = async (applicationId) => {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await apiFetch(`${API_URL}/applications/${applicationId}/resume-url`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || 'Failed to get secure resume URL');
+        }
+
+        const result = await response.json();
+        return result.url;
+    } catch (error) {
+        console.error('API Error (getSecureResumeUrl):', error);
+        throw error;
+    }
+};
+
 export const uploadFile = async (file, type = 'file') => {
     try {
         const token = localStorage.getItem('token');
         const formData = new FormData();
         formData.append(type, file);
 
-        const response = await fetch(`${API_URL}/upload/${type === 'file' ? '' : type}`, {
+        const response = await apiFetch(`${API_URL}/upload/${type === 'file' ? '' : type}`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -576,4 +675,5 @@ export const uploadFile = async (file, type = 'file') => {
         throw error;
     }
 };
+
 

@@ -8,13 +8,15 @@ import {
     deleteInterview,
     getMyInterviews,
     getJobInterviews,
-    submitInterviewReview
+    submitInterviewReview,
+    markInterviewAttendance
 } from '../controllers/interviewController.js';
 
 const router = express.Router();
 
 router.post('/schedule', protect, scheduleInterview);
-router.post('/:id/review-feedback', protect, authorize('recruiter'), submitInterviewReview);
+router.post('/:id/review-feedback', protect, authorize('recruiter', 'company_admin', 'admin'), submitInterviewReview);
+router.post('/:id/attendance', protect, authorize('recruiter', 'admin', 'company_admin'), markInterviewAttendance);
 router.get('/my', protect, getMyInterviews);        // recruiter: own interviews
 router.get('/job/:jobId', protect, getJobInterviews);       // admin: all interviews for a job
 router.get('/', getInterviews);

@@ -6,6 +6,11 @@ const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
 import fetch from 'node-fetch';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import {
+    resolveSignedResumeUrl,
+    isCloudinaryResumePublicId,
+    isCloudinaryResumeUrl
+} from '../config/cloudinary.js';
 
 // Configure Gemini AI
 const genAI = process.env.GEMINI_API_KEY
@@ -122,21 +127,26 @@ const cosineSimilarity = (vecA, vecB) => {
 
 /**
  * Parse resume PDF to extract text.
- * Fetches URLs directly ΓÇö Cloudinary uploads are public (type:'upload'),
- * no URL signing needed.
+ * Security: allow only Cloudinary resume references for remote fetches.
  */
 export const parseResume = async (input) => {
     try {
         if (!input) return "";
 
         let dataBuffer;
+        const value = String(input || '').trim();
 
-        // Handle URL ΓÇö fetch directly, no signing needed
-        if (input.startsWith('http')) {
+        // Handle Cloudinary resume references (public ID or URL)
+        if (isCloudinaryResumePublicId(value) || isCloudinaryResumeUrl(value)) {
             try {
-                const response = await fetch(input);
+                const resolved = await resolveSignedResumeUrl(value, 120);
+                if (!resolved?.url) {
+                    console.error('Failed to resolve signed URL for resume reference');
+                    return "";
+                }
+                const response = await fetch(resolved.url);
                 if (!response.ok) {
-                    console.error(`Failed to fetch resume: ${response.status} from ${input}`);
+                    console.error(`Failed to fetch resume via signed URL: status=${response.status}`);
                     return "";
                 }
                 const arrayBuffer = await response.arrayBuffer();
@@ -146,14 +156,19 @@ export const parseResume = async (input) => {
                 return "";
             }
         } else {
+            // Block arbitrary external URL fetches.
+            if (value.startsWith('http')) {
+                console.error('Blocked non-Cloudinary resume URL');
+                return "";
+            }
 
             // Handle local file paths
-            let cleanInput = input.startsWith('/') ? input.substring(1) : input;
+            let cleanInput = value.startsWith('/') ? value.substring(1) : value;
             const possiblePaths = [
-                input,
+                value,
                 cleanInput,
                 path.join('uploads', cleanInput),
-                path.join(process.cwd(), input)
+                path.join(process.cwd(), value)
             ];
 
             let foundPath = null;
@@ -167,7 +182,7 @@ export const parseResume = async (input) => {
             if (foundPath) {
                 dataBuffer = fs.readFileSync(foundPath);
             } else {
-                console.error('Resume file not found:', input);
+                console.error('Resume file not found:', value);
                 return "";
             }
         }

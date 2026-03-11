@@ -202,6 +202,8 @@ const sendInterviewConfirmation = async (interview, candidate, recruiter, job) =
             minute: '2-digit',
             timeZone: 'Asia/Kolkata'
         });
+        const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const acknowledgementLink = `${clientUrl}/candidate-calendar?interview=${interview._id}&action=acknowledge`;
 
         // Send to candidate
         const candidateEmailResult = await sendEmail(
@@ -213,7 +215,8 @@ const sendInterviewConfirmation = async (interview, candidate, recruiter, job) =
                 scheduledAt: scheduledAt,
                 duration: interview.duration || 60,
                 recruiterName: recruiter.name,
-                meetingLink: interview.meetingLink
+                meetingLink: interview.meetingLink,
+                acknowledgementLink
             }
         );
 
@@ -245,7 +248,7 @@ const sendInterviewConfirmation = async (interview, candidate, recruiter, job) =
                 scheduledAt: scheduledAt,
                 duration: interview.duration || 60,
                 meetingLink: interview.meetingLink,
-                resumeLink: candidate.resume || '#'
+                resumeLink: `${clientUrl}/communication`
             }
         );
 

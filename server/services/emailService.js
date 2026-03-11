@@ -75,6 +75,20 @@ const templates = {
                         <center>
                             <a href="${data.meetingLink}" class="button">Join Meeting</a>
                         </center>
+
+                        ${data.acknowledgementLink ? `
+                        <div style="margin-top: 24px; padding: 16px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;">
+                            <p style="margin: 0 0 10px 0; font-weight: bold; color: #1e3a8a;">
+                                Action required: Please acknowledge your availability
+                            </p>
+                            <p style="margin: 0 0 12px 0; color: #1f2937;">
+                                Confirm whether you can attend this interview. If unavailable, submit a reason and your available time slots for rescheduling.
+                            </p>
+                            <a href="${data.acknowledgementLink}" style="display:inline-block;background:#1d4ed8;color:white;padding:10px 18px;text-decoration:none;border-radius:6px;font-weight:bold;">
+                                Acknowledge Interview Availability
+                            </a>
+                        </div>
+                        ` : ''}
                         
                         <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
                             <strong>Tips for your interview:</strong><br>
@@ -149,7 +163,7 @@ const templates = {
                         <p>Please review the candidate's profile before the interview.</p>
                         
                         <center>
-                            <a href="${data.resumeLink}" class="button">View Resume</a>
+                            <a href="${data.resumeLink}" class="button">Open In RecruitPro</a>
                             <a href="${data.meetingLink}" class="button">Join Meeting</a>
                         </center>
                     </div>

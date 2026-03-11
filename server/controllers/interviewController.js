@@ -6,9 +6,19 @@ import User from '../models/User.js';
 import { sendInterviewNotifications } from '../services/notificationService.js';
 import { createCalendarEvent } from '../services/calendarService.js';
 import { analyzeInterviewFeedback, deriveFinalDecision } from '../utils/interviewAnalyzer.js';
+import { applyNoShowPenalty } from '../services/candidateReliabilityService.js';
 
 // Check if MongoDB is connected
 const isMongoConnected = () => isConnected();
+const toOid = (value) => {
+    if (!value) return null;
+    if (value instanceof ObjectId) return value;
+    try {
+        return new ObjectId(value);
+    } catch {
+        return null;
+    }
+};
 
 export const scheduleInterview = async (req, res) => {
     try {
@@ -165,15 +175,6 @@ export const submitInterviewReview = async (req, res) => {
     try {
         const db = getDb();
         const interviewId = req.params.id;
-        const toOid = (value) => {
-            if (!value) return null;
-            if (value instanceof ObjectId) return value;
-            try {
-                return new ObjectId(value);
-            } catch {
-                return null;
-            }
-        };
         const {
             recruiterRecommendation,
             reviewNotes,
@@ -188,12 +189,17 @@ export const submitInterviewReview = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Interview not found' });
         }
 
-        const recruiterProfile = await Recruiter.findOne({ userId: req.user._id });
-        if (!recruiterProfile || recruiterProfile._id?.toString() !== interview.recruiterId?.toString()) {
-            return res.status(403).json({
-                success: false,
-                message: 'Not authorized to submit review for this interview'
-            });
+        // Admins and company admins can review any interview.
+        // Plain recruiters must own the interview.
+        const isElevatedRole = ['admin', 'company_admin', 'super_admin'].includes(req.user.role);
+        if (!isElevatedRole) {
+            const recruiterProfile = await Recruiter.findOne({ userId: req.user._id });
+            if (!recruiterProfile || recruiterProfile._id?.toString() !== interview.recruiterId?.toString()) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Not authorized to submit review for this interview'
+                });
+            }
         }
 
         const interviewEnd = interview.endsAt
@@ -214,6 +220,82 @@ export const submitInterviewReview = async (req, res) => {
             });
         }
 
+        // ── ABSENT PATH: candidate didn't show up ────────────────────────────────
+        if (recruiterRecommendation === 'absent') {
+            const [candidate, job] = await Promise.all([
+                interview.candidateId ? User.findById(interview.candidateId) : null,
+                toOid(interview.jobId) ? db.collection('jobs').findOne({ _id: toOid(interview.jobId) }) : null
+            ]);
+
+            let penaltyResult = null;
+            if (interview.candidateId) {
+                try {
+                    penaltyResult = await applyNoShowPenalty({
+                        interviewId,
+                        candidateId: interview.candidateId,
+                        markedBy: req.user._id,
+                        reason: 'Candidate absent — marked via post-interview review form',
+                        force: true  // bypass RSVP check — recruiter explicitly confirms absence
+                    });
+                } catch (penaltyErr) {
+                    console.warn('[absent] Could not apply no-show penalty:', penaltyErr.message);
+                }
+            }
+
+            const absentReview = {
+                recruiterRecommendation: 'absent',
+                notes: String(reviewNotes).trim(),
+                ratings: {},
+                transcript: { url: null, name: null, hasText: false, updatedAt: new Date() },
+                submittedBy: req.user._id,
+                submittedAt: new Date()
+            };
+
+            const updatedInterview = await Interview.findByIdAndUpdate(interviewId, {
+                status: 'no_show',
+                completedAt: new Date(),
+                interviewReview: absentReview,
+                noShowProcessed: true
+            });
+
+            if (interview.applicationId) {
+                const applicationId = toOid(interview.applicationId);
+                if (applicationId) {
+                    await db.collection('applications').updateOne(
+                        { _id: applicationId },
+                        {
+                            $set: {
+                                status: 'rejected',
+                                rejectionReason: 'Candidate was absent for the interview',
+                                reviewNotes: absentReview.notes,
+                                interviewReview: absentReview,
+                                finalDecisionSource: 'recruiter_no_show',
+                                finalRecommendation: 'reject',
+                                reviewedBy: req.user._id,
+                                reviewedAt: new Date(),
+                                updatedAt: new Date()
+                            }
+                        }
+                    );
+                }
+            }
+
+            const reliabilityProfile = penaltyResult?.profile;
+            return res.status(200).json({
+                success: true,
+                message: penaltyResult?.applied
+                    ? `Candidate marked absent. Credit deducted (−${penaltyResult.penalty}). New balance: ${reliabilityProfile?.credits ?? '?'}/100.`
+                    : 'Candidate marked absent. No credit deduction (RSVP not accepted or already penalised).',
+                data: {
+                    interview: updatedInterview,
+                    finalDecision: 'reject',
+                    noShowPenalty: penaltyResult
+                }
+            });
+        }
+        // ── END ABSENT PATH ──────────────────────────────────────────────────────
+
+        // Normal review: transcript is required
         if (!transcriptUrl && !transcriptText) {
             return res.status(400).json({
                 success: false,
@@ -301,6 +383,87 @@ export const submitInterviewReview = async (req, res) => {
     }
 };
 
+// POST /api/interviews/:id/attendance - recruiter/admin marks candidate as present or absent
+export const markInterviewAttendance = async (req, res) => {
+    try {
+        const db = getDb();
+        const interviewId = req.params.id;
+        const { attendanceStatus, notes } = req.body || {};
+
+        if (!['present', 'absent'].includes(attendanceStatus)) {
+            return res.status(400).json({
+                success: false,
+                message: "attendanceStatus must be 'present' or 'absent'"
+            });
+        }
+
+        const interview = await Interview.findById(interviewId);
+        if (!interview) {
+            return res.status(404).json({
+                success: false,
+                message: 'Interview not found'
+            });
+        }
+
+        const updatePayload = {
+            attendance: {
+                status: attendanceStatus,
+                markedBy: toOid(req.user._id),
+                markedAt: new Date(),
+                notes: notes?.trim() || ''
+            },
+            status: attendanceStatus === 'present' ? 'completed' : 'no_show',
+            completedAt: new Date()
+        };
+
+        let noShowPenalty = null;
+        if (attendanceStatus === 'absent' && interview.candidateId) {
+            noShowPenalty = await applyNoShowPenalty({
+                interviewId,
+                candidateId: interview.candidateId,
+                markedBy: req.user._id,
+                reason: 'Candidate absent after interview acknowledgment'
+            });
+
+            if (interview.applicationId) {
+                const applicationId = toOid(interview.applicationId);
+                if (applicationId) {
+                    await db.collection('applications').updateOne(
+                        { _id: applicationId },
+                        {
+                            $set: {
+                                status: 'rejected',
+                                rejectionReason: 'Candidate was absent for interview after confirming attendance',
+                                updatedAt: new Date()
+                            }
+                        }
+                    );
+                }
+            }
+        }
+
+        const updatedInterview = await Interview.findByIdAndUpdate(interviewId, updatePayload);
+
+        return res.status(200).json({
+            success: true,
+            message: attendanceStatus === 'present'
+                ? 'Interview marked as completed'
+                : 'Interview marked as no-show',
+            data: {
+                interview: updatedInterview,
+                noShowPenalty
+            }
+        });
+    } catch (error) {
+        console.error('Error marking interview attendance:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to mark interview attendance',
+            error: error.message
+        });
+    }
+};
+
 // GET /api/interviews/my  — recruiter sees their own interviews (for calendar UI)
 export const getMyInterviews = async (req, res) => {
     try {
@@ -315,7 +478,7 @@ export const getMyInterviews = async (req, res) => {
         const interviews = await db.collection('interviews')
             .find({
                 recruiterId: recruiter._id,
-                status: { $in: ['scheduled', 'in_progress', 'completed', 'cancelled'] }
+                status: { $in: ['scheduled', 'in_progress', 'completed', 'cancelled', 'no_show'] }
             })
             .sort({ scheduledAt: 1 })
             .toArray();

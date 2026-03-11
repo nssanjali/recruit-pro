@@ -3,6 +3,29 @@ import { ObjectId } from 'mongodb';
 import { autoScheduleInterview } from '../services/automationService.js';
 import { evaluateApplication } from '../utils/resumeMatcher.js';
 import { getDb } from '../config/db.js';
+import { cloudinary, resolveSignedResumeUrl, isAllowedResumeReference } from '../config/cloudinary.js';
+import { assertCandidateCanApply } from '../services/candidateReliabilityService.js';
+import { scheduleInterviewForApplication } from '../services/interviewSchedulingService.js';
+
+const toPublicResumeUrl = (resumeRef = '') => {
+    const ref = String(resumeRef || '').trim();
+    if (!ref) return '';
+
+    if (ref.startsWith('http')) {
+        if (ref.includes('/authenticated/')) {
+            return ref
+                .replace('/authenticated/', '/upload/')
+                .replace(/\/s--[^/]+--\//, '/');
+        }
+        return ref;
+    }
+
+    return cloudinary.url(ref, {
+        resource_type: 'image',
+        type: 'upload',
+        secure: true
+    });
+};
 
 /**
  * Resolve form field IDs to human-readable labels.
@@ -58,10 +81,18 @@ export const getApplications = async (req, res) => {
             applications = await Application.findWithJobDetails({});
         }
 
+        const sanitizedApplications = applications.map((app) => {
+            const { resume, ...rest } = app;
+            return {
+                ...rest,
+                hasResume: Boolean(resume)
+            };
+        });
+
         res.status(200).json({
             success: true,
-            count: applications.length,
-            data: applications
+            count: sanitizedApplications.length,
+            data: sanitizedApplications
         });
     } catch (error) {
         console.error('Error fetching applications:', error);
@@ -147,7 +178,16 @@ export const getApplication = async (req, res) => {
         // otherwise run full Gemini-powered evaluation.
         // ----------------------------------------------------------------
         let evalResult = null;
-        const alreadyEvaluated = !!application.aiAnalysis;
+        const hasPersistedEvaluation = (
+            application.evaluatedAt ||
+            application.finalScore !== undefined ||
+            application.resumeScore !== undefined ||
+            application.profileScore !== undefined ||
+            application.aiSummary ||
+            (Array.isArray(application.aiStrengths) && application.aiStrengths.length > 0) ||
+            (Array.isArray(application.aiWeaknesses) && application.aiWeaknesses.length > 0)
+        );
+        const alreadyEvaluated = Boolean(hasPersistedEvaluation);
 
         if (!alreadyEvaluated && candidate?.resume && job?.description) {
             const { evaluateApplication } = await import('../utils/resumeMatcher.js');
@@ -212,7 +252,7 @@ export const getApplication = async (req, res) => {
                 name: candidate.name,
                 email: candidate.email,
                 phone: candidate.phone,
-                resume: candidate.resume
+                hasResume: Boolean(candidate.resume || application.resume)
             } : null,
             job: job ? {
                 _id: job._id,
@@ -247,6 +287,7 @@ export const getApplication = async (req, res) => {
                 job?.applicationFormConfig
             )
         };
+        enrichedApplication.resume = Boolean(candidate?.resume || application.resume);
 
         // Persist fresh evaluation to DB so subsequent loads are instant
         if (evalResult && !alreadyEvaluated) {
@@ -400,6 +441,7 @@ export const reanalyzeApplication = async (req, res) => {
 export const createApplication = async (req, res) => {
     try {
         const { jobId, formResponses } = req.body;
+        assertCandidateCanApply(req.user);
 
         if (!jobId) {
             return res.status(400).json({
@@ -423,6 +465,12 @@ export const createApplication = async (req, res) => {
 
         // Extract resume from formResponses or use profile resume
         const resume = formResponses?.resume || req.user.resume || '';
+        if (resume && !isAllowedResumeReference(resume)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid resume reference. Please upload resume from the secure uploader.'
+            });
+        }
         const coverLetter = formResponses?.coverLetter || '';
 
         const applicationData = {
@@ -449,9 +497,9 @@ export const createApplication = async (req, res) => {
         });
     } catch (error) {
         console.error('Error creating application:', error);
-        res.status(500).json({
+        res.status(error.statusCode || 500).json({
             success: false,
-            message: 'Server Error'
+            message: error.message || 'Server Error'
         });
     }
 };
@@ -684,6 +732,54 @@ export const updateApplicationStatus = async (req, res) => {
             });
         }
 
+        if (normalizedStatus === 'shortlisted') {
+            const schedulingFailureMessages = {
+                NO_RECRUITERS: 'no active recruiter is available for this job',
+                NO_SLOT: 'no common slot is currently available',
+                NO_GCAL_TOKEN: 'Google Calendar is not connected for scheduler accounts',
+                UNKNOWN: 'unknown scheduling issue occurred'
+            };
+
+            try {
+                const scheduleResult = await scheduleInterviewForApplication(req.params.id, {
+                    preferredRecruiterUserId: req.user.role === 'recruiter' ? req.user._id : null
+                });
+
+                if (scheduleResult?.scheduled) {
+                    const refreshedApplication = await Application.findById(req.params.id);
+                    return res.status(200).json({
+                        success: true,
+                        message: scheduleResult.alreadyScheduled
+                            ? 'Application already has a scheduled interview'
+                            : 'Application shortlisted and interview scheduled',
+                        interviewScheduled: true,
+                        data: refreshedApplication || application,
+                        interview: scheduleResult.interview || null,
+                        schedulingDiagnostics: scheduleResult.diagnostics || null
+                    });
+                }
+
+                return res.status(200).json({
+                    success: true,
+                    message: `Application shortlisted. Interview not scheduled yet: ${schedulingFailureMessages[scheduleResult?.reason] || schedulingFailureMessages.UNKNOWN}.`,
+                    interviewScheduled: false,
+                    schedulingReason: scheduleResult?.reason || 'UNKNOWN',
+                    schedulingDiagnostics: scheduleResult?.diagnostics || null,
+                    data: application
+                });
+            } catch (scheduleError) {
+                console.error('Error auto-scheduling shortlisted application:', scheduleError);
+                return res.status(200).json({
+                    success: true,
+                    message: `Application shortlisted. Interview scheduling failed: ${scheduleError.message}`,
+                    interviewScheduled: false,
+                    schedulingReason: 'SCHEDULING_EXCEPTION',
+                    schedulingDiagnostics: { error: scheduleError.message },
+                    data: application
+                });
+            }
+        }
+
         res.status(200).json({
             success: true,
             message: `Application status updated to ${normalizedStatus}`,
@@ -787,5 +883,76 @@ export const rejectApplication = async (req, res) => {
             success: false,
             message: 'Server Error'
         });
+    }
+};
+
+// @desc    Get a short-lived signed URL for a candidate's resume (secure access)
+// @route   GET /api/applications/:id/resume-url
+// @access  Private — recruiters/admins get any; candidates only their own
+export const getSecureResumeUrl = async (req, res) => {
+    try {
+        const db = getDb();
+
+        const toOid = (id) => {
+            try { return id instanceof ObjectId ? id : new ObjectId(id.toString()); }
+            catch { return null; }
+        };
+
+        const application = await db.collection('applications').findOne({
+            _id: toOid(req.params.id)
+        });
+
+        if (!application) {
+            return res.status(404).json({ success: false, message: 'Application not found' });
+        }
+
+        // If authenticated as candidate, only allow own resume
+        if (req.user?.role === 'candidate') {
+            if (application.candidateId.toString() !== req.user?._id?.toString()) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Not authorized to access this resume'
+                });
+            }
+        }
+
+        // Get the resume URL from the candidate's profile or from the application itself
+        const candidate = await db.collection('users').findOne({ _id: toOid(application.candidateId) });
+        const resumeUrl = candidate?.resume || application.resume;
+
+        if (!resumeUrl) {
+            return res.status(404).json({ success: false, message: 'No resume found for this application' });
+        }
+
+        if (!isAllowedResumeReference(resumeUrl)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Resume reference is invalid. Candidate should re-upload resume.'
+            });
+        }
+
+        const EXPIRY_SECONDS = 3600;
+        let finalUrl = toPublicResumeUrl(resumeUrl);
+        if (!finalUrl) {
+            const resolved = await resolveSignedResumeUrl(resumeUrl, EXPIRY_SECONDS);
+            finalUrl = resolved?.url || '';
+        }
+        if (!finalUrl) {
+            return res.status(500).json({ success: false, message: 'Could not generate resume URL' });
+        }
+
+        const actor = req.user
+            ? `${req.user._id} (${req.user.role})`
+            : 'public-request';
+        console.log(`🔒 Secure resume URL generated for application ${req.params.id} by ${actor}`);
+
+        return res.status(200).json({
+            success: true,
+            url: finalUrl,
+            expiresIn: EXPIRY_SECONDS
+        });
+    } catch (error) {
+        console.error('Error generating secure resume URL:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
     }
 };

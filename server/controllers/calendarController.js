@@ -68,13 +68,16 @@ export const getCandidateCalendarData = async (req, res) => {
                 allDay: false,
                 status: iv.status,
                 detail: {
+                    interviewId: iv._id,
                     jobTitle: job?.title || iv.jobTitle,
                     scheduledAt: iv.scheduledAt,
                     endsAt: iv.endsAt,
                     meetingLink: iv.meetingLink,
                     duration: iv.duration,
                     status: iv.status,
-                    autoScheduled: iv.autoScheduled
+                    autoScheduled: iv.autoScheduled,
+                    candidateRsvp: iv.candidateRsvp || null,
+                    rescheduleRequest: iv.rescheduleRequest || null
                 }
             });
         }
@@ -167,7 +170,9 @@ export const getAdminCalendarData = async (req, res) => {
                     scheduledAt: iv.scheduledAt,
                     endsAt: iv.endsAt,
                     meetingLink: iv.meetingLink,
-                    status: iv.status
+                    status: iv.status,
+                    candidateRsvp: iv.candidateRsvp || null,
+                    rescheduleRequest: iv.rescheduleRequest || null
                 }
             });
         }
@@ -226,11 +231,19 @@ export const getRecruiterCalendarData = async (req, res) => {
             const job = iv.jobId ? jobMap[iv.jobId?.toString()] : null;
             const status = iv.status || 'scheduled';
             const isCompleted = status === 'completed';
+            const rsvpAccepted = iv.candidateRsvp?.response === 'accepted';
+            const titlePrefix = status === 'reschedule_requested'
+                ? '↻'
+                : isCompleted
+                    ? '✓'
+                    : rsvpAccepted
+                        ? '✅'
+                        : '📅';
 
             events.push({
                 id: `iv-${iv._id}`,
                 type: isCompleted ? 'completed' : 'interview',
-                title: `${isCompleted ? '✓' : '📅'} ${iv.candidateName || 'Interview'} – ${job?.title || iv.jobTitle || 'Role'}`,
+                title: `${titlePrefix} ${iv.candidateName || 'Interview'} – ${job?.title || iv.jobTitle || 'Role'}`,
                 date: iv.scheduledAt,
                 endDate: iv.endsAt,
                 allDay: false,
@@ -244,7 +257,9 @@ export const getRecruiterCalendarData = async (req, res) => {
                     meetingLink: iv.meetingLink,
                     duration: iv.duration,
                     status: status,
-                    completedAt: iv.completedAt || iv.scheduledAt
+                    completedAt: iv.completedAt || iv.scheduledAt,
+                    candidateRsvp: iv.candidateRsvp || null,
+                    rescheduleRequest: iv.rescheduleRequest || null
                 }
             });
         }
@@ -325,6 +340,54 @@ export const updateSettings = async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ message: 'Error updating settings' });
+    }
+};
+
+// Candidate availability settings for scheduling
+export const getCandidateSettings = async (req, res) => {
+    try {
+        const { getDb } = await import('../config/db.js');
+        const { getDefaultWorkingHours } = await import('../services/calendarService.js');
+        const db = await getDb();
+
+        const availability = await db.collection('calendarAvailability').findOne({ userId: req.user._id });
+
+        res.json({
+            workingHours: availability?.workingHours || getDefaultWorkingHours(),
+            timezone: availability?.timezone || 'Asia/Kolkata',
+            leaveDates: availability?.leaveDates || []
+        });
+    } catch (err) {
+        res.status(500).json({ message: 'Error getting candidate settings' });
+    }
+};
+
+export const updateCandidateSettings = async (req, res) => {
+    try {
+        const { getDb } = await import('../config/db.js');
+        const db = await getDb();
+        const updates = req.body || {};
+
+        await db.collection('calendarAvailability').updateOne(
+            { userId: req.user._id },
+            {
+                $set: {
+                    workingHours: updates.workingHours,
+                    timezone: updates.timezone || 'Asia/Kolkata',
+                    leaveDates: Array.isArray(updates.leaveDates) ? updates.leaveDates : [],
+                    updatedAt: new Date()
+                },
+                $setOnInsert: {
+                    userId: req.user._id,
+                    createdAt: new Date()
+                }
+            },
+            { upsert: true }
+        );
+
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ message: 'Error updating candidate settings' });
     }
 };
 

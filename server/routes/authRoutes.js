@@ -6,6 +6,7 @@ import {
     registerCompany,
     login,
     getMe,
+    getMySecureResumeUrl,
     logout,
     updateDetails,
     updatePassword,
@@ -13,7 +14,7 @@ import {
     verifyOTP,
     resetPassword
 } from '../controllers/authController.js';
-import { protect } from '../middleware/auth.js';
+import { protect, optionalProtect } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -23,6 +24,7 @@ router.post('/register-company', registerCompany);
 router.post('/login', login);
 router.get('/logout', logout);
 router.get('/me', protect, getMe);
+router.get('/me/resume-url', optionalProtect, getMySecureResumeUrl);
 router.put('/updatedetails', protect, updateDetails);
 router.put('/updatepassword', protect, updatePassword);
 router.post('/forgotpassword', forgotPassword);

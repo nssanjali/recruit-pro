@@ -47,7 +47,7 @@ export function JobFormBuilderPage() {
                 // Update existing job
                 await updateJob(id, { applicationFormConfig: formConfig });
                 toast.success('Application form saved successfully!');
-                setTimeout(() => navigate(`/edit-job/${id}`), 1500);
+                setTimeout(() => navigate('/company-admin'), 1500);
             } else {
                 // Store in sessionStorage for new jobs
                 sessionStorage.setItem('pendingFormConfig', JSON.stringify(formConfig));

@@ -164,11 +164,7 @@ export default function App() {
                 <JobPosting />
               </Layout>
             } />
-            <Route path="/edit-job/:id" element={
-              <Layout user={user} onLogout={handleLogout} activePage="company-admin">
-                <JobPosting />
-              </Layout>
-            } />
+
             <Route path="/company-admin/jobs/:id" element={
               <Layout user={user} onLogout={handleLogout} activePage="company-admin">
                 <CompanyJobOverview />

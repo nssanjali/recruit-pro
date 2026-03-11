@@ -41,6 +41,31 @@ export const protect = async (req, res, next) => {
     }
 };
 
+// Optional auth: populate req.user when token is valid, but never block request.
+export const optionalProtect = async (req, res, next) => {
+    try {
+        const authHeader = req.headers.authorization || '';
+        if (!authHeader.startsWith('Bearer ')) {
+            return next();
+        }
+
+        const token = authHeader.split(' ')[1];
+        if (!token) {
+            return next();
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await User.findById(decoded.id);
+        if (user) {
+            req.user = user;
+        }
+    } catch {
+        // Ignore invalid tokens for optional auth.
+    }
+
+    next();
+};
+
 // Grant access to specific roles
 export const authorize = (...roles) => {
     return (req, res, next) => {

@@ -20,7 +20,8 @@ import {
     getApplications,
     getJobById,
     getJobInterviews,
-    getMappedRecruiters
+    getMappedRecruiters,
+    markInterviewAttendance
 } from '../lib/api';
 import { normalizeApplicationStatus } from '../lib/applicationStatus';
 
@@ -40,6 +41,7 @@ export function CompanyJobOverview() {
     const [recruiters, setRecruiters] = useState([]);
     const [interviews, setInterviews] = useState([]);
     const [calendarEvents, setCalendarEvents] = useState([]);
+    const [attendanceLoadingId, setAttendanceLoadingId] = useState('');
 
     useEffect(() => {
         const fetchOverview = async () => {
@@ -108,6 +110,22 @@ export function CompanyJobOverview() {
         );
     }
 
+    const handleMarkAttendance = async (interviewId, attendanceStatus) => {
+        setAttendanceLoadingId(interviewId);
+        try {
+            const response = await markInterviewAttendance(interviewId, { attendanceStatus });
+            const updated = response?.data?.interview;
+            if (updated) {
+                setInterviews((prev) => prev.map((iv) => (String(iv._id) === String(updated._id) ? { ...iv, ...updated } : iv)));
+            }
+            toast.success(attendanceStatus === 'present' ? 'Interview marked as attended' : 'Interview marked as no-show');
+        } catch (error) {
+            toast.error(error.message || 'Failed to update attendance');
+        } finally {
+            setAttendanceLoadingId('');
+        }
+    };
+
     return (
         <div className="p-4 sm:p-6 lg:p-8 space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -124,7 +142,6 @@ export function CompanyJobOverview() {
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" className="font-bold" onClick={() => navigate(`/edit-job/${job._id}`)}>Edit Job</Button>
                     <Button className="bg-[#4285f4] hover:bg-[#3b79db] text-white font-bold" onClick={() => navigate(`/jobs/${job._id}/candidates`)}>
                         View Candidates
                     </Button>
@@ -264,7 +281,38 @@ export function CompanyJobOverview() {
                                 <p className="text-sm font-bold text-slate-900">{iv.candidateName || 'Candidate'}</p>
                                 <p className="text-xs text-slate-500">{new Date(iv.scheduledAt).toLocaleString('en-IN')}</p>
                             </div>
-                            <Badge className="capitalize bg-slate-100 text-slate-700 border-slate-200">{iv.status || 'scheduled'}</Badge>
+                            <div className="flex items-center gap-2">
+                                <Badge className={`capitalize ${iv.status === 'completed'
+                                        ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                        : iv.status === 'no_show'
+                                            ? 'bg-orange-100 text-orange-700 border-orange-200'
+                                            : 'bg-slate-100 text-slate-700 border-slate-200'
+                                    }`}>
+                                    {iv.status || 'scheduled'}
+                                </Badge>
+                                {['scheduled', 'in_progress', 'rescheduled'].includes(iv.status) && (
+                                    <>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="font-bold border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                            disabled={attendanceLoadingId === String(iv._id)}
+                                            onClick={() => handleMarkAttendance(String(iv._id), 'present')}
+                                        >
+                                            Attended
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="font-bold border-orange-200 text-orange-700 hover:bg-orange-50"
+                                            disabled={attendanceLoadingId === String(iv._id)}
+                                            onClick={() => handleMarkAttendance(String(iv._id), 'absent')}
+                                        >
+                                            No-show
+                                        </Button>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     ))}
                     {interviews.length === 0 && <p className="text-sm text-slate-500">No interviews scheduled yet.</p>}

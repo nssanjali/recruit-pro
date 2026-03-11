@@ -11,17 +11,22 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
     X, Clock, Video, Loader2, Calendar, ChevronLeft, ChevronRight,
     Sparkles, BellRing, RefreshCw, FileText, AlertCircle,
-    MapPin, CheckCircle2, Send, CalendarDays
+    MapPin, CheckCircle2, Send, CalendarDays, Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-const API = 'http://localhost:5000/api';
+const API = import.meta.env.VITE_API_URL || '/api';
 const token = () => localStorage.getItem('token');
 const authHdr = () => ({ Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' });
 const apiFetch = async (path, opts = {}) => {
     const res = await fetch(`${API}${path}`, { ...opts, headers: { ...authHdr(), ...(opts.headers || {}) } });
     if (!res.ok) { const e = await res.json().catch(() => ({ message: res.statusText })); throw new Error(e.message); }
     return res.json();
+};
+const normalizeInterviewId = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    return raw.startsWith('iv-') ? raw.slice(3) : raw;
 };
 const CAL_ACCENT = '#4285f4';
 const CAL_ACCENT_SOFT = '#e8f0fe';
@@ -37,6 +42,8 @@ const STATUS_COLOR = {
     under_review: CAL_ACCENT,
     shortlisted: '#10b981',
     interview_scheduled: CAL_ACCENT,
+    reschedule_requested: '#f59e0b',
+    no_show: '#f97316',
     rejected: '#f43f5e',
     hired: '#059669',
     scheduled: CAL_ACCENT,
@@ -76,14 +83,66 @@ const Glass = ({ children, className = '', style = {} }) => (
 );
 
 /* ── Event Detail Drawer ── */
-function EventDrawer({ event, onClose }) {
+function EventDrawer({ event, onClose, onUpdated }) {
+    const [responding, setResponding] = useState(false);
+    const [showRescheduleForm, setShowRescheduleForm] = useState(false);
+    const [rescheduleReason, setRescheduleReason] = useState('');
+    const [proposedSlots, setProposedSlots] = useState(['']);
     if (!event) return null;
     const cfg = TYPE[event.type] || TYPE.application;
     const Icon = cfg.icon;
     const d = event.detail;
+    const interviewId = normalizeInterviewId(event.id || d?.interviewId);
+    const isInterview = event.type === 'interview';
+    const isUpcomingInterview = isInterview && d?.scheduledAt && new Date(d.scheduledAt) > new Date();
+    const alreadyResponded = Boolean(d?.candidateRsvp?.response);
+    const canAcknowledge = isUpcomingInterview
+        && ['scheduled', 'rsvp_pending'].includes(String(event.status || '').toLowerCase())
+        && !alreadyResponded;
 
     const fmtDate = s => s ? new Date(s).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '—';
     const fmtTime = s => s ? new Date(s).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—';
+
+    const submitAccepted = async () => {
+        if (!interviewId) return;
+        setResponding(true);
+        try {
+            await apiFetch(`/communications/interviews/${interviewId}/rsvp`, {
+                method: 'POST',
+                body: JSON.stringify({ response: 'accepted', message: 'Acknowledged via calendar' })
+            });
+            toast.success('Attendance acknowledged. You are marked as attending.');
+            await onUpdated?.();
+            onClose();
+        } catch (error) {
+            toast.error(error.message || 'Failed to acknowledge interview');
+        } finally {
+            setResponding(false);
+        }
+    };
+
+    const submitReschedule = async () => {
+        if (!interviewId) return;
+        const validSlots = proposedSlots.filter((s) => String(s || '').trim());
+        if (!rescheduleReason.trim()) {
+            toast.error('Please provide a reason for reschedule');
+            return;
+        }
+        setResponding(true);
+        try {
+            await apiFetch(`/communications/interviews/${interviewId}/reschedule-request`, {
+                method: 'POST',
+                body: JSON.stringify({ reason: rescheduleReason.trim(), proposedSlots: validSlots })
+            });
+            toast.success('Reschedule request sent to recruiter');
+            await onUpdated?.();
+            onClose();
+        } catch (error) {
+            toast.error(error.message || 'Failed to request reschedule');
+        } finally {
+            setResponding(false);
+        }
+    };
 
     return (
         <AnimatePresence>
@@ -172,6 +231,71 @@ function EventDrawer({ event, onClose }) {
                             </motion.button>
                         </a>
                     )}
+                    {isInterview && d?.candidateRsvp?.response && (
+                        <div className={`w-full py-2.5 rounded-xl text-center text-xs font-black ${d.candidateRsvp.response === 'accepted' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-orange-50 text-orange-700 border border-orange-200'}`}>
+                            {d.candidateRsvp.response === 'accepted'
+                                ? 'You acknowledged attendance'
+                                : 'Reschedule requested'}
+                        </div>
+                    )}
+                    {canAcknowledge && (
+                        <div className="space-y-2">
+                            <button
+                                onClick={submitAccepted}
+                                disabled={responding}
+                                className="w-full py-3 rounded-2xl font-black text-white text-sm bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+                            >
+                                I will attend
+                            </button>
+                            {!showRescheduleForm ? (
+                                <button
+                                    onClick={() => setShowRescheduleForm(true)}
+                                    disabled={responding}
+                                    className="w-full py-3 rounded-2xl font-black text-orange-700 text-sm border border-orange-200 bg-orange-50 hover:bg-orange-100 disabled:opacity-60 transition-colors"
+                                >
+                                    I cannot attend - Request reschedule
+                                </button>
+                            ) : (
+                                <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 space-y-2">
+                                    <textarea
+                                        value={rescheduleReason}
+                                        onChange={(e) => setRescheduleReason(e.target.value)}
+                                        placeholder="Reason for reschedule"
+                                        className="w-full rounded-lg border border-orange-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 resize-none"
+                                        rows={2}
+                                    />
+                                    {proposedSlots.map((slot, idx) => (
+                                        <input
+                                            key={idx}
+                                            type="datetime-local"
+                                            value={slot}
+                                            onChange={(e) => {
+                                                const next = [...proposedSlots];
+                                                next[idx] = e.target.value;
+                                                setProposedSlots(next);
+                                            }}
+                                            className="w-full rounded-lg border border-orange-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                                        />
+                                    ))}
+                                    {proposedSlots.length < 3 && (
+                                        <button
+                                            onClick={() => setProposedSlots((prev) => [...prev, ''])}
+                                            className="w-full py-2 rounded-lg font-black text-xs border border-orange-200 text-orange-700 bg-white hover:bg-orange-100"
+                                        >
+                                            Add Another Slot
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={submitReschedule}
+                                        disabled={responding}
+                                        className="w-full py-2.5 rounded-lg font-black text-white text-xs bg-orange-600 hover:bg-orange-700 disabled:opacity-60"
+                                    >
+                                        Send Reschedule Request
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <button onClick={onClose}
                         className="w-full py-3 rounded-2xl font-black text-slate-600 text-sm border border-slate-200 hover:bg-slate-50 transition-colors">
                         Close
@@ -209,6 +333,98 @@ function InfoBlock({ icon: Icon, label, value, sub, cfg }) {
     );
 }
 
+function CandidateAvailabilitySettings({ onSaved }) {
+    const [settings, setSettings] = useState(null);
+    const [saving, setSaving] = useState(false);
+    const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+    useEffect(() => {
+        apiFetch('/calendar/settings/candidate')
+            .then(setSettings)
+            .catch(() => toast.error('Failed to load candidate availability'));
+    }, []);
+
+    const save = async () => {
+        setSaving(true);
+        try {
+            await apiFetch('/calendar/settings/candidate', {
+                method: 'PUT',
+                body: JSON.stringify(settings)
+            });
+            toast.success('Candidate availability saved');
+            onSaved?.();
+        } catch (error) {
+            toast.error(error.message || 'Failed to save candidate availability');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (!settings) {
+        return (
+            <div className="flex items-center justify-center py-8 text-slate-500 text-xs font-bold">
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                Loading settings...
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-3">
+            {DAYS.map((day) => {
+                const d = settings.workingHours?.[day] || {};
+                return (
+                    <div key={day} className="flex items-center gap-2">
+                        <button
+                            onClick={() => setSettings((s) => ({
+                                ...s,
+                                workingHours: { ...s.workingHours, [day]: { ...d, enabled: !d.enabled } }
+                            }))}
+                            className={`relative w-9 h-5 rounded-full transition-all ${d.enabled ? 'bg-blue-500' : 'bg-slate-300'}`}
+                        >
+                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${d.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                        </button>
+                        <span className="w-8 text-xs font-black text-slate-600 uppercase">{day.slice(0, 3)}</span>
+                        {d.enabled ? (
+                            <div className="flex items-center gap-1 flex-1">
+                                <input
+                                    type="time"
+                                    value={d.start || '09:00'}
+                                    onChange={(e) => setSettings((s) => ({
+                                        ...s,
+                                        workingHours: { ...s.workingHours, [day]: { ...d, start: e.target.value } }
+                                    }))}
+                                    className="flex-1 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
+                                />
+                                <span className="text-slate-400 text-xs">{'->'}</span>
+                                <input
+                                    type="time"
+                                    value={d.end || '17:00'}
+                                    onChange={(e) => setSettings((s) => ({
+                                        ...s,
+                                        workingHours: { ...s.workingHours, [day]: { ...d, end: e.target.value } }
+                                    }))}
+                                    className="flex-1 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
+                                />
+                            </div>
+                        ) : (
+                            <span className="text-xs font-bold text-slate-500">Off</span>
+                        )}
+                    </div>
+                );
+            })}
+
+            <button
+                onClick={save}
+                disabled={saving}
+                className="w-full py-2.5 rounded-xl text-xs font-black text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60"
+            >
+                {saving ? 'Saving...' : 'Save Availability'}
+            </button>
+        </div>
+    );
+}
+
 /* ── Main ── */
 export function CandidateCalendar() {
     const calRef = useRef(null);
@@ -217,6 +433,7 @@ export function CandidateCalendar() {
     const [selected, setSelected] = useState(null);
     const [viewTitle, setViewTitle] = useState('');
     const [activeView, setActiveView] = useState('dayGridMonth');
+    const [showAvailabilitySettings, setShowAvailabilitySettings] = useState(false);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -228,6 +445,20 @@ export function CandidateCalendar() {
     }, []);
 
     useEffect(() => { fetchData(); }, [fetchData]);
+
+    useEffect(() => {
+        if (!events.length) return;
+        const params = new URLSearchParams(window.location.search);
+        const interviewId = params.get('interview');
+        if (!interviewId) return;
+        const match = events.find((ev) => normalizeInterviewId(ev.id) === String(interviewId));
+        if (match) {
+            setSelected(match);
+            if (match.date && calRef.current?.getApi) {
+                calRef.current.getApi().gotoDate(match.date);
+            }
+        }
+    }, [events]);
 
     const now = new Date();
     const upcoming = events
@@ -364,6 +595,36 @@ export function CandidateCalendar() {
                         </div>
                     )}
                 </Glass>
+
+                {/* Availability settings */}
+                <Glass>
+                    <button
+                        onClick={() => setShowAvailabilitySettings((v) => !v)}
+                        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-slate-50 transition-all rounded-2xl"
+                    >
+                        <span className="flex items-center gap-2 text-xs font-black text-slate-700">
+                            <Settings className="w-3.5 h-3.5 text-slate-600" />
+                            My Availability
+                        </span>
+                        <motion.div animate={{ rotate: showAvailabilitySettings ? 90 : 0 }} transition={{ duration: 0.2 }}>
+                            <ChevronRight className="w-4 h-4 text-slate-400" />
+                        </motion.div>
+                    </button>
+                    <AnimatePresence>
+                        {showAvailabilitySettings && (
+                            <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="overflow-hidden border-t border-slate-100"
+                            >
+                                <div className="p-4">
+                                    <CandidateAvailabilitySettings onSaved={fetchData} />
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </Glass>
             </div>
 
             {/* Main Calendar */}
@@ -436,7 +697,7 @@ export function CandidateCalendar() {
                 </div>
             </div>
 
-            <EventDrawer event={selected} onClose={() => setSelected(null)} />
+            <EventDrawer event={selected} onClose={() => setSelected(null)} onUpdated={fetchData} />
         </div>
     );
 }

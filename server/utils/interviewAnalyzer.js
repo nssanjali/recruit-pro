@@ -15,6 +15,36 @@ const normalizeRecommendation = (value) => {
     return 'consider';
 };
 
+const alignScoreWithRecommendation = (score, recommendation) => {
+    const normalizedScore = clamp(Math.round(Number(score) || 0), 0, 100);
+    const rec = normalizeRecommendation(recommendation);
+
+    // Keep recommendation and score in the same decision band.
+    if (rec === 'reject' && normalizedScore >= 50) return 45;
+    if (rec === 'hire' && normalizedScore < 70) return 75;
+    if (rec === 'consider' && (normalizedScore < 50 || normalizedScore >= 70)) return 60;
+    return normalizedScore;
+};
+
+const isTranscriptInsufficient = (text) => {
+    const raw = String(text || '').trim();
+    if (!raw) return true;
+
+    const normalized = raw.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!normalized) return true;
+
+    const tokens = normalized.split(' ').filter(Boolean);
+    const uniqueTokens = new Set(tokens);
+    const alphaChars = normalized.replace(/[^a-z]/g, '');
+
+    // Very short, repetitive, or mostly noise content is not evaluable.
+    if (tokens.length < 10) return true;
+    if (alphaChars.length < 40) return true;
+    if (uniqueTokens.size <= 3) return true;
+
+    return false;
+};
+
 const fallbackAnalysis = ({
     recruiterRecommendation,
     recruiterReview,
@@ -86,13 +116,19 @@ ${(transcriptText || '').slice(0, 10000)}
         return null;
     }
 
+    const recommendation = normalizeRecommendation(parsed.recommendation);
+    const score = alignScoreWithRecommendation(
+        Number(parsed.score) || 60,
+        recommendation
+    );
+
     return {
         summary: String(parsed.summary).trim(),
         strengths: parsed.strengths.slice(0, 3).map((item) => String(item).trim()).filter(Boolean),
         concerns: parsed.concerns.slice(0, 3).map((item) => String(item).trim()).filter(Boolean),
-        recommendation: normalizeRecommendation(parsed.recommendation),
+        recommendation,
         confidence: clamp(Number(parsed.confidence) || 0.6, 0.05, 0.99),
-        score: clamp(Math.round(Number(parsed.score) || 60), 0, 100),
+        score,
         source: 'gemini'
     };
 };
@@ -110,6 +146,20 @@ export const analyzeInterviewFeedback = async ({
         : (transcriptUrl ? await parseResume(transcriptUrl) : '');
 
     const finalTranscript = String(extractedTranscript || '').trim();
+    if (isTranscriptInsufficient(finalTranscript)) {
+        return {
+            summary: 'Interview transcript is insufficient or unintelligible for a reliable assessment.',
+            strengths: ['Interview record received'],
+            concerns: ['Transcript content is too limited for skill evaluation', 'Request a valid transcript or re-interview'],
+            recommendation: 'reject',
+            confidence: 0.35,
+            score: 30,
+            source: 'quality_gate',
+            evaluatedAt: new Date(),
+            transcriptLength: finalTranscript.length
+        };
+    }
+
     const gemini = await tryGemini({
         jobTitle,
         candidateName,
@@ -142,4 +192,3 @@ export const deriveFinalDecision = ({ recruiterRecommendation, aiRecommendation 
     if (recruiter === 'consider' && ai === 'reject') return 'reviewing';
     return 'reviewing';
 };
-

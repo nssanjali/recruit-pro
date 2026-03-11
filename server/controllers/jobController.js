@@ -4,6 +4,9 @@ import Application from '../models/Application.js';
 import { ObjectId } from 'mongodb';
 import { parseResume, calculateMatchScore } from '../utils/resumeMatcher.js';
 import { bulkScheduleInterviews } from '../services/interviewSchedulingService.js';
+import { assertCandidateCanApply } from '../services/candidateReliabilityService.js';
+import { getDb } from '../config/db.js';
+import { isAllowedResumeReference } from '../config/cloudinary.js';
 
 /** Remove fields that must never reach candidates or the public */
 const stripAdminFields = (job) => {
@@ -16,6 +19,94 @@ const normalizeApplicationStatus = (status) => {
     const value = String(status || 'pending').toLowerCase().trim();
     if (value === 'sortlisted' || value === 'interview_scheduled') return 'shortlisted';
     return value;
+};
+
+const toNormalizedScore = (value) => {
+    const score = Number(value);
+    if (!Number.isFinite(score)) return null;
+    return Math.max(0, Math.min(100, score));
+};
+
+const deriveRecruiterReviewScore = (interviewReview) => {
+    const directScore = toNormalizedScore(interviewReview?.score ?? interviewReview?.overallScore);
+    if (directScore !== null) return Math.round(directScore);
+
+    const ratingValues = Object.values(interviewReview?.ratings || {})
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value) && value >= 0);
+    if (ratingValues.length > 0) {
+        const maxRatingValue = Math.max(...ratingValues);
+        const normalized = maxRatingValue <= 5
+            ? ratingValues.map((value) => value * 20)
+            : ratingValues;
+        const avg = normalized.reduce((sum, value) => sum + value, 0) / normalized.length;
+        return Math.round(Math.max(0, Math.min(100, avg)));
+    }
+
+    const rec = String(interviewReview?.recruiterRecommendation || '').toLowerCase();
+    if (rec === 'hire') return 85;
+    if (rec === 'consider') return 65;
+    if (rec === 'reject') return 40;
+    return null;
+};
+
+const ROLE_FIT_TEMPLATES = [
+    { role: 'Data Engineer', keywords: ['etl', 'airflow', 'spark', 'hadoop', 'kafka', 'dbt', 'warehouse', 'pipeline', 'sql', 'data modeling'] },
+    { role: 'Backend Engineer', keywords: ['node', 'java', 'python', 'api', 'microservices', 'rest', 'graphql', 'database', 'redis', 'docker'] },
+    { role: 'Frontend Engineer', keywords: ['react', 'javascript', 'typescript', 'css', 'html', 'redux', 'next', 'ui', 'frontend', 'tailwind'] },
+    { role: 'Full Stack Engineer', keywords: ['react', 'node', 'api', 'database', 'frontend', 'backend', 'full stack', 'typescript', 'deployment'] },
+    { role: 'DevOps Engineer', keywords: ['kubernetes', 'docker', 'ci/cd', 'aws', 'gcp', 'azure', 'terraform', 'ansible', 'monitoring', 'linux'] },
+    { role: 'Data Analyst', keywords: ['excel', 'tableau', 'power bi', 'analytics', 'dashboard', 'sql', 'reporting', 'insights', 'statistics'] },
+    { role: 'Machine Learning Engineer', keywords: ['machine learning', 'tensorflow', 'pytorch', 'model', 'feature engineering', 'nlp', 'scikit', 'mlops'] },
+    { role: 'QA Engineer', keywords: ['testing', 'selenium', 'cypress', 'automation', 'qa', 'test cases', 'regression', 'quality assurance'] }
+];
+
+const buildCandidateProfileText = (candidate, resumeText) => {
+    const skills = Array.isArray(candidate?.skills) ? candidate.skills.join(', ') : '';
+    const specialization = Array.isArray(candidate?.specialization) ? candidate.specialization.join(', ') : String(candidate?.specialization || '');
+    const projects = Array.isArray(candidate?.projects)
+        ? candidate.projects.map((p) => {
+            if (typeof p === 'string') return p;
+            if (p && typeof p === 'object') return [p.title, p.description, p.techStack].filter(Boolean).join(' ');
+            return '';
+        }).join(' ')
+        : '';
+    const experience = `${candidate?.experienceYears || 0} years experience`;
+    return [resumeText, skills, specialization, projects, experience].filter(Boolean).join(' ');
+};
+
+const inferRoleFits = (profileText) => {
+    const text = String(profileText || '').toLowerCase();
+    const fits = ROLE_FIT_TEMPLATES.map((item) => {
+        const matchedKeywords = item.keywords.filter((kw) => text.includes(kw.toLowerCase()));
+        const score = Math.round((matchedKeywords.length / item.keywords.length) * 100);
+        return {
+            role: item.role,
+            score,
+            matchedKeywords: matchedKeywords.slice(0, 6)
+        };
+    })
+        .filter((item) => item.matchedKeywords.length >= 2)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+
+    return fits.length > 0
+        ? fits
+        : [{
+            role: 'General Software Engineer',
+            score: 45,
+            matchedKeywords: ['software', 'engineering']
+        }];
+};
+
+const computeRoleTitleBoost = (job, topRoles) => {
+    const title = `${job?.title || ''} ${job?.department || ''}`.toLowerCase();
+    const roleBoosts = topRoles.map((r) => {
+        const roleTokens = String(r.role || '').toLowerCase().split(' ').filter((t) => t.length > 2);
+        const hitCount = roleTokens.filter((token) => title.includes(token)).length;
+        return hitCount > 0 ? Math.min(15, hitCount * 6) : 0;
+    });
+    return roleBoosts.length > 0 ? Math.max(...roleBoosts) : 0;
 };
 
 /** Add company branding fields from the posting company admin */
@@ -50,13 +141,16 @@ export const getJobs = async (req, res) => {
         let query = {};
 
         // Role-based filtering:
-        // - company_admin: sees only jobs they posted
-        // - recruiter: sees only jobs mapped to them
+        // - company_admin: sees only jobs they posted (all statuses — they manage them)
+        // - recruiter: sees only jobs mapped to them (all statuses — they need to manage pipeline)
         // - admin: sees all jobs
-        // - candidate: sees all jobs
+        // - candidate: sees ONLY open jobs (closed/draft are hidden)
         console.log(`getJobs request from user: ${req.user._id} (Role: ${req.user.role})`);
 
-        if (req.user.role === 'company_admin') {
+        if (req.user.role === 'candidate') {
+            // Candidates see only actively open jobs
+            query.status = 'open';
+        } else if (req.user.role === 'company_admin') {
             query.postedBy = req.user._id;
         } else if (req.user.role === 'recruiter') {
             // Get recruiter profile
@@ -136,10 +230,18 @@ export const getJob = async (req, res) => {
             });
         }
 
+        // Candidates and unauthenticated users cannot view closed/draft jobs
+        const isAdmin = req.user && ['admin', 'company_admin', 'recruiter'].includes(req.user.role);
+        if (!isAdmin && job.status !== 'open') {
+            return res.status(404).json({
+                success: false,
+                message: 'Job not found'
+            });
+        }
+
         await enrichJobWithCompanyMedia(job);
 
         // Public / candidate route — strip admin fields
-        const isAdmin = req.user && ['admin', 'company_admin', 'recruiter'].includes(req.user.role);
         res.status(200).json({
             success: true,
             data: isAdmin ? job : stripAdminFields(job)
@@ -270,6 +372,7 @@ export const deleteJob = async (req, res) => {
 // @access  Private (Recruiter, Admin)
 export const getJobCandidates = async (req, res) => {
     try {
+        const db = getDb();
         const job = await Job.findById(req.params.id);
 
         if (!job) {
@@ -292,6 +395,7 @@ export const getJobCandidates = async (req, res) => {
         // Find applications for this job
         const applications = await Application.find({ jobId: job._id });
         const candidateIds = applications.map(app => app.candidateId);
+        const applicationIds = applications.map(app => app._id?.toString()).filter(Boolean);
 
         if (candidateIds.length === 0) {
             return res.status(200).json({
@@ -301,6 +405,32 @@ export const getJobCandidates = async (req, res) => {
         }
 
         const candidates = await User.find({ _id: { $in: candidateIds } });
+        const latestInterviewByApplicationId = new Map();
+        if (applicationIds.length > 0) {
+            const interviewQueryIds = applicationIds.flatMap((id) => {
+                const values = [id];
+                try {
+                    values.push(new ObjectId(id));
+                } catch {
+                    // Ignore invalid ObjectId strings
+                }
+                return values;
+            });
+
+            const interviews = await db.collection('interviews')
+                .find({
+                    jobId: job._id,
+                    applicationId: { $in: interviewQueryIds }
+                })
+                .sort({ scheduledAt: -1, createdAt: -1 })
+                .toArray();
+
+            for (const interview of interviews) {
+                const appId = interview?.applicationId?.toString?.();
+                if (!appId || latestInterviewByApplicationId.has(appId)) continue;
+                latestInterviewByApplicationId.set(appId, interview);
+            }
+        }
 
         // Determine if match analysis should be included
         // Only admins and company_admins (who posted the job) get match scores
@@ -351,25 +481,58 @@ export const getJobCandidates = async (req, res) => {
 
             const { password, ...candidateData } = candidate._doc || candidate; // Handle Mongoose document
             const appId = application?._id?.toString();
+            const latestInterview = appId ? latestInterviewByApplicationId.get(appId) : null;
+            const interviewReview = latestInterview?.interviewReview || application?.interviewReview || null;
+            const interviewAi = latestInterview?.aiInterviewAnalysis || application?.interviewAiAnalysis || null;
+            const initialShortlistScore = toNormalizedScore(matchScore);
+            const recruiterReviewScore = deriveRecruiterReviewScore(interviewReview);
+            const interviewAiScore = toNormalizedScore(interviewAi?.score);
+            const hasAllUltimateMetrics = (
+                initialShortlistScore !== null &&
+                recruiterReviewScore !== null &&
+                interviewAiScore !== null
+            );
+            const ultimateAverageScore = hasAllUltimateMetrics
+                ? Math.round((initialShortlistScore + recruiterReviewScore + interviewAiScore) / 3)
+                : null;
             console.log(`📋 Candidate ${candidate.name} - Application ID: ${appId}`);
             return {
                 ...candidateData,
                 applicationId: appId, // Convert ObjectId to string for JSON
-                resume: resumeUrl, // Explicitly include the resume URL found
+                resume: Boolean(resumeUrl), // Do not expose raw resume URL
                 finalScore: includeMatchAnalysis ? (application?.finalScore ?? undefined) : undefined,
                 resumeScore: includeMatchAnalysis ? (application?.resumeScore ?? undefined) : undefined,
                 profileScore: includeMatchAnalysis ? (application?.profileScore ?? undefined) : undefined,
                 aiSummary: includeMatchAnalysis ? (application?.aiSummary ?? application?.aiAnalysis?.summary ?? undefined) : undefined,
                 matchScore: includeMatchAnalysis ? matchScore : undefined, // Only include if authorized
                 analysis: includeMatchAnalysis ? analysis : undefined,    // Only include if authorized
+                ultimateAverageScore: includeMatchAnalysis ? ultimateAverageScore : undefined,
+                scoringBreakdown: includeMatchAnalysis ? {
+                    initialShortlistScore,
+                    recruiterReviewScore,
+                    interviewAiScore
+                } : undefined,
                 applicationStatus: application?.status, // Raw status
                 applicationStatusNormalized: normalizeApplicationStatus(application?.status) // UI lane status
             };
         }));
 
-        // Sort by match score (descending) only if match analysis is included
+        // Sort by ultimate average score first, then match score (descending)
         if (includeMatchAnalysis) {
-            candidatesWithScores.sort((a, b) => b.matchScore - a.matchScore);
+            candidatesWithScores.sort((a, b) => {
+                const aUltimate = Number.isFinite(Number(a.ultimateAverageScore))
+                    ? Number(a.ultimateAverageScore)
+                    : null;
+                const bUltimate = Number.isFinite(Number(b.ultimateAverageScore))
+                    ? Number(b.ultimateAverageScore)
+                    : null;
+
+                if (aUltimate !== null && bUltimate !== null) return bUltimate - aUltimate;
+                if (aUltimate !== null) return -1;
+                if (bUltimate !== null) return 1;
+
+                return Number(b.matchScore ?? -1) - Number(a.matchScore ?? -1);
+            });
         }
 
         res.status(200).json({
@@ -395,27 +558,33 @@ export const checkJobMatch = async (req, res) => {
         const job = await Job.findById(req.params.id);
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 
-        if (!req.user.resume) {
-            return res.status(400).json({ success: false, message: 'No resume found on profile' });
+        const resumeRef = String(req.user?.resume || '').trim();
+        let resumeText = '';
+        if (resumeRef && isAllowedResumeReference(resumeRef)) {
+            try {
+                resumeText = req.user?.resumeText || await parseResume(resumeRef) || '';
+            } catch {
+                resumeText = '';
+            }
         }
 
-        console.log('Checking match for resume:', req.user.resume);
+        const profileText = buildCandidateProfileText(req.user, resumeText);
+        const analysisText = String((resumeText && resumeText.length >= 120) ? resumeText : profileText || '').trim();
 
-        let resumeText = req.user.resumeText;
-        if (!resumeText) {
-            resumeText = await parseResume(req.user.resume);
-        }
-
-        if (!resumeText) {
-            console.error('Failed to parse resume text. Path:', req.user.resume);
-            return res.status(400).json({ success: false, message: 'Failed to parse resume text' });
-        }
-
-        const matchScore = calculateMatchScore(job.description + ' ' + (job.requirements || ''), resumeText);
+        const matchScore = analysisText
+            ? calculateMatchScore(job.description + ' ' + (job.requirements || ''), analysisText)
+            : {
+                score: 0,
+                resumeScore: 0,
+                summary: 'Not enough resume/profile data to calculate a reliable match.',
+                strongMatches: [],
+                missingKeywords: []
+            };
 
         res.status(200).json({
             success: true,
-            analysis: matchScore
+            analysis: matchScore,
+            analysisMode: (resumeText && resumeText.length >= 120) ? 'resume' : 'profile'
         });
     } catch (error) {
         console.error('Error checking match:', error);
@@ -551,6 +720,80 @@ export const retrySchedulingForCompanyAdmin = async (req, res) => {
     }
 };
 
+// @desc    Analyze candidate resume/profile and return role-fit job recommendations
+// @route   POST /api/jobs/role-fit/analyze
+// @access  Private (Candidate)
+export const analyzeCandidateRoleFit = async (req, res) => {
+    try {
+        const db = getDb();
+        const candidate = req.user;
+        const providedResumeUrl = String(req.body?.resumeUrl || '').trim();
+        const resumeUrl = providedResumeUrl || String(candidate?.resume || '').trim();
+
+        let resumeText = '';
+        if (resumeUrl && isAllowedResumeReference(resumeUrl)) {
+            try {
+                resumeText = await parseResume(resumeUrl) || '';
+            } catch {
+                resumeText = '';
+            }
+        }
+
+        const hasStrongResume = resumeText.length >= 120;
+        const profileText = buildCandidateProfileText(candidate, hasStrongResume ? resumeText : '');
+        const analysisText = String(hasStrongResume ? resumeText : profileText || '').trim();
+
+        if (!analysisText) {
+            return res.status(400).json({
+                success: false,
+                message: 'Not enough profile data to analyze role fit. Add skills or experience first.'
+            });
+        }
+
+        const topRoles = inferRoleFits(profileText);
+
+        const jobs = await db.collection('jobs').find({ status: { $ne: 'closed' } }).toArray();
+        const jobFits = jobs.map((job) => {
+            const jdText = `${job.title || ''} ${job.department || ''} ${job.description || ''} ${job.requirements || ''}`;
+            const match = calculateMatchScore(jdText, analysisText);
+            const baseScore = Number(match?.score ?? match?.resumeScore ?? 0);
+            const roleBoost = computeRoleTitleBoost(job, topRoles);
+            const fitScore = Math.max(0, Math.min(100, Math.round((baseScore * 0.85) + roleBoost)));
+
+            return {
+                ...job,
+                fitScore,
+                fitReason: roleBoost > 0
+                    ? 'Strong match between your role-fit profile and this job title'
+                    : hasStrongResume
+                        ? 'Resume and skills alignment with job description'
+                        : 'Profile and skills alignment with job description'
+            };
+        })
+            .filter((job) => job.fitScore >= (hasStrongResume ? 55 : 45))
+            .sort((a, b) => b.fitScore - a.fitScore);
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                resumeSource: hasStrongResume
+                    ? (providedResumeUrl ? 'uploaded' : 'profile')
+                    : 'profile-fallback',
+                analysisMode: hasStrongResume ? 'resume' : 'profile',
+                topRoles,
+                recommendedJobIds: jobFits.map((job) => String(job._id)),
+                recommendedJobs: jobFits.slice(0, 50)
+            }
+        });
+    } catch (error) {
+        console.error('Error analyzing candidate role fit:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to analyze role fit'
+        });
+    }
+};
+
 // @desc    Apply to a job
 // @route   POST /api/jobs/:id/apply
 // @access  Private (Candidate)
@@ -561,6 +804,7 @@ export const applyJob = async (req, res) => {
     try {
         const jobId = req.params.id;
         const userId = req.user._id;
+        assertCandidateCanApply(req.user);
         // Get application data from request body (sent by frontend)
         const applicationData = req.body || {};
 
@@ -578,7 +822,16 @@ export const applyJob = async (req, res) => {
             });
         }
 
-        // Check if already applied (in Job model)
+        // Block applications to closed or draft jobs
+        if (job.status !== 'open') {
+            return res.status(400).json({
+                success: false,
+                message: job.status === 'draft'
+                    ? 'This job is not yet published and cannot accept applications.'
+                    : 'This job is no longer accepting applications.'
+            });
+        }
+
         if (job.candidates && job.candidates.some(id => id.toString() === userId.toString())) {
             console.log('⚠️  User already applied to this job');
             return res.status(400).json({
@@ -619,6 +872,13 @@ export const applyJob = async (req, res) => {
                 formData: applicationData.responses || {},
                 status: 'pending'
             };
+
+            if (newApplicationData.resume && !isAllowedResumeReference(newApplicationData.resume)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid resume reference. Please upload resume using secure uploader.'
+                });
+            }
 
             console.log('  Application Data:', newApplicationData);
 
@@ -679,9 +939,9 @@ export const applyJob = async (req, res) => {
         });
     } catch (error) {
         console.error('❌ Error applying to job:', error);
-        res.status(500).json({
+        res.status(error.statusCode || 500).json({
             success: false,
-            message: 'Server Error: ' + error.message
+            message: error.message || 'Server Error'
         });
     }
 };

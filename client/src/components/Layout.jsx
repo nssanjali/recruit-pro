@@ -159,6 +159,49 @@ export function Layout({ children, user, onLogout }) {
         return date.toLocaleDateString();
     };
 
+    const normalizeInterviewId = (value) => {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        return raw.startsWith('iv-') ? raw.slice(3) : raw;
+    };
+
+    const extractInterviewIdFromNotification = (item) => {
+        const rawId = item?.metadata?.interviewId
+            || item?.interviewId
+            || item?.relatedTo?.id
+            || item?.relatedTo?._id;
+        if (!rawId) return '';
+        if (typeof rawId === 'string') return normalizeInterviewId(rawId);
+        if (typeof rawId === 'object') {
+            if (rawId.$oid) return normalizeInterviewId(rawId.$oid);
+            if (rawId.toString) return normalizeInterviewId(rawId.toString());
+        }
+        return '';
+    };
+
+    const getNotificationTargetPath = (item) => {
+        const role = user?.role;
+        const text = [
+            item?.subject,
+            item?.content,
+            item?.message,
+            item?.type,
+            item?.status
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        const isCalendarRelated = String(item?.type || '').toLowerCase() === 'calendar' ||
+            /(interview|calendar|rsvp|reschedule|meeting|scheduled|invitation|slot)/.test(text);
+
+        if (isCalendarRelated) {
+            const interviewId = extractInterviewIdFromNotification(item);
+            const interviewQuery = interviewId ? `?interview=${encodeURIComponent(interviewId)}` : '';
+            if (role === 'candidate') return `/candidate-calendar${interviewQuery}`;
+            if (role === 'recruiter') return `/calendar${interviewQuery}`;
+            if (role === 'company_admin') return `/admin-calendar${interviewQuery}`;
+        }
+        return '/communication';
+    };
+
     const unreadNotifications = notifications.filter((item) => {
         const createdAt = item?.createdAt ? new Date(item.createdAt) : null;
         if (!createdAt || Number.isNaN(createdAt.getTime())) return false;
@@ -382,7 +425,7 @@ export function Layout({ children, user, onLogout }) {
                                                                 key={item._id || item.id || `${title}-${index}`}
                                                                 onClick={() => {
                                                                     setNotificationOpen(false);
-                                                                    navigate('/communication');
+                                                                    navigate(getNotificationTargetPath(item));
                                                                 }}
                                                                 className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors"
                                                             >

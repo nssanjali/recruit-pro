@@ -1,5 +1,5 @@
 import express from 'express';
-import { upload } from '../config/cloudinary.js';
+import { upload, generateSignedUrl } from '../config/cloudinary.js';
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -50,8 +50,8 @@ router.post('/', protect, uploadWithErrorHandling(upload.single('file')), (req, 
     }
 });
 
-// Specific upload route for resumes
-router.post('/resume', protect, uploadWithErrorHandling(upload.single('resume')), (req, res) => {
+// Specific upload route for resumes (temporarily public)
+router.post('/resume', uploadWithErrorHandling(upload.single('resume')), (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({
@@ -66,10 +66,13 @@ router.post('/resume', protect, uploadWithErrorHandling(upload.single('resume'))
         console.log('  Public ID:', req.file.filename);
         console.log('  Original name:', req.file.originalname);
 
+        const previewUrl = generateSignedUrl(req.file.filename, 'image', 300, 'upload');
+
         res.status(200).json({
             success: true,
             data: {
                 url: req.file.path,
+                previewUrl,
                 name: req.file.originalname,
                 filename: req.file.filename,
                 format: req.file.format

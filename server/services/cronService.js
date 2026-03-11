@@ -148,7 +148,7 @@ const inactivateExpiredJobs = async () => {
 
         if (expiredJobs.length > 0) {
             console.log(`[cron] Found ${expiredJobs.length} job(s) with passed cutoff date — inactivating...`);
-            
+
             const result = await db.collection('jobs').updateMany(
                 {
                     status: 'open',

@@ -9,8 +9,11 @@ export const getUsers = async (req, res) => {
 
         // Remove sensitive fields
         const sanitizedUsers = users.map(user => {
-            const { password, resetPasswordToken, resetPasswordExpire, ...safeUser } = user;
-            return safeUser;
+            const { password, resetPasswordToken, resetPasswordExpire, resume, ...safeUser } = user;
+            return {
+                ...safeUser,
+                hasResume: Boolean(resume)
+            };
         });
 
         res.status(200).json({
@@ -36,8 +39,11 @@ export const getUsersByRole = async (req, res) => {
 
         // Remove sensitive fields
         const sanitizedUsers = users.map(user => {
-            const { password, resetPasswordToken, resetPasswordExpire, ...safeUser } = user;
-            return safeUser;
+            const { password, resetPasswordToken, resetPasswordExpire, resume, ...safeUser } = user;
+            return {
+                ...safeUser,
+                hasResume: Boolean(resume)
+            };
         });
 
         res.status(200).json({

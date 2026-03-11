@@ -36,7 +36,7 @@ const storage = new CloudinaryStorage({
         if (file.fieldname === 'resume') {
             folder = 'recruitpro/resumes';
             resource_type = 'image';        // PDFs are stored as 'image' type in Cloudinary
-            type = 'upload';                // Public access
+            type = 'upload';                // Temporarily public delivery
         } else if (file.fieldname === 'avatar') {
             folder = 'recruitpro/avatars';
             resource_type = 'image';
@@ -60,39 +60,65 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage: storage });
 
+const CLOUDINARY_RESUME_PREFIX = 'recruitpro/resumes/';
+
+const isCloudinaryResumeUrl = (value = '') => {
+    const str = String(value || '').trim();
+    if (!str.startsWith('http')) return false;
+    return /res\.cloudinary\.com\/.+\/(?:image|raw|video)\/(?:upload|authenticated)\//i.test(str)
+        && str.includes('/recruitpro/resumes/');
+};
+
+const isCloudinaryResumePublicId = (value = '') => {
+    const str = String(value || '').trim();
+    return str.startsWith(CLOUDINARY_RESUME_PREFIX);
+};
+
+const isAllowedResumeReference = (value = '') => {
+    if (!value) return false;
+    return isCloudinaryResumePublicId(value) || isCloudinaryResumeUrl(value);
+};
+
 /**
- * Generate a signed URL for authenticated access to Cloudinary resources
- * @param {string} publicId - The public ID of the resource (including folder path and extension)
- * @param {string} resourceType - Type of resource ('raw', 'image', etc.)
- * @param {number} expirySeconds - URL expiry time in seconds (default 1 hour)
+ * Generate a signed, expiring URL for a publicly-stored Cloudinary resource.
+ * Works with files uploaded as type='upload' (not 'authenticated' storage).
+ *
+ * Signing the URL means it includes a Cloudinary-validated signature and expiry timestamp,
+ * so the URL stops working after `expirySeconds` seconds even though the underlying file
+ * is stored as a public upload.
+ *
+ * @param {string} publicId - Cloudinary public ID (with or without extension)
+ * @param {string} resourceType - Cloudinary resource type ('image', 'raw', 'video')
+ * @param {number} expirySeconds - How long the URL is valid (default 1 hour)
  */
-const generateSignedUrl = (publicId, resourceType = 'raw', expirySeconds = 3600) => {
+const generateSignedUrl = (
+    publicId,
+    resourceType = 'image',
+    expirySeconds = 3600,
+    deliveryType = 'upload',
+    version = null
+) => {
     if (!publicId) return null;
-    
-    const timestamp = Math.floor(Date.now() / 1000) + expirySeconds;
-    
+
     try {
-        // Remove extension from public ID for cloudinary.url() if present
-        let cleanPublicId = publicId;
-        if (publicId.includes('.')) {
-            // Split at last dot to get public_id without extension
-            const lastDotIndex = publicId.lastIndexOf('.');
-            cleanPublicId = publicId.substring(0, lastDotIndex);
-        }
-        
-        const signedUrl = cloudinary.url(cleanPublicId, {
-            type: 'authenticated',
+        const expiresAt = Math.floor(Date.now() / 1000) + expirySeconds;
+
+        const signedUrl = cloudinary.url(publicId, {
             resource_type: resourceType,
+            type: deliveryType,
             secure: true,
-            expires_at: timestamp,
-            sign_url: true
+            sign_url: true,     // Cloudinary will sign with API secret
+            expires_at: expiresAt,
+            ...(version ? { version } : {}),
         });
+
         return signedUrl;
     } catch (error) {
         console.error('Error generating signed URL:', error);
         return null;
     }
 };
+
 
 /**
  * Extract public ID from Cloudinary URL (including extension)
@@ -101,33 +127,141 @@ const generateSignedUrl = (publicId, resourceType = 'raw', expirySeconds = 3600)
  */
 const extractPublicIdFromUrl = (url) => {
     if (!url) return null;
-    
-    // Try to extract from format: /upload/v1771167842/recruitpro/resumes/1771167842493-sasidar_resume.pdf
-    // or: /upload/recruitpro/resumes/1771167842493-sasidar_resume.pdf
-    // or: /upload/v1234/recruitpro/resumes/filename.pdf
-    
+
+    // Supported formats:
+    // /image/upload/v123/recruitpro/resumes/file.pdf
+    // /image/authenticated/v123/recruitpro/resumes/file.pdf
+    // /image/authenticated/s--<sig>--/v1/recruitpro/resumes/file.pdf
+
     let publicId = null;
-    
-    // Pattern 1: /upload/v<version>/<path>
-    let match = url.match(/\/upload\/v\d+\/(.+)$/);
+
+    // Pattern 1: /(upload|authenticated)/(optional signature)/v<version>/<path>
+    let match = url.match(/\/(?:upload|authenticated)\/(?:s--[^/]+--\/)?v\d+\/(.+)$/);
     if (match) {
         publicId = match[1];
     } else {
-        // Pattern 2: /upload/<path> (no version)
-        match = url.match(/\/upload\/(.+)$/);
+        // Pattern 2: /(upload|authenticated)/(optional signature)/<path> (no explicit version)
+        match = url.match(/\/(?:upload|authenticated)\/(?:s--[^/]+--\/)?(.+)$/);
         if (match) {
             publicId = match[1];
         }
     }
-    
+
     if (!publicId) return null;
-    
+
     // Remove trailing query parameters if any
     publicId = publicId.split('?')[0];
-    
+    // Guard against accidental retained version prefix
+    publicId = publicId.replace(/^v\d+\//, '');
+
     // If it has .pdf extension, keep it in the publicId for compatibility
     // Some Cloudinary operations need the extension, others don't
     return publicId;
 };
 
-export { cloudinary, upload, generateSignedUrl, extractPublicIdFromUrl };
+const canAccessSignedUrl = async (url) => {
+    if (!url) return false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+        const headRes = await fetch(url, {
+            method: 'HEAD',
+            redirect: 'follow',
+            signal: controller.signal
+        });
+        if (headRes.ok) return true;
+    } catch {
+        // Fall through to GET probe
+    } finally {
+        clearTimeout(timeout);
+    }
+
+    const controller2 = new AbortController();
+    const timeout2 = setTimeout(() => controller2.abort(), 7000);
+    try {
+        const getRes = await fetch(url, {
+            method: 'GET',
+            redirect: 'follow',
+            headers: { Range: 'bytes=0-0' },
+            signal: controller2.signal
+        });
+        return getRes.ok;
+    } catch {
+        return false;
+    } finally {
+        clearTimeout(timeout2);
+    }
+};
+
+const resolveSignedResumeUrl = async (resumeRef, expirySeconds = 3600) => {
+    if (!resumeRef || !isAllowedResumeReference(resumeRef)) return null;
+
+    const extractedPublicId = extractPublicIdFromUrl(resumeRef) || String(resumeRef).trim();
+    if (!extractedPublicId) return null;
+
+    const publicIdCandidates = Array.from(new Set([
+        extractedPublicId,
+        extractedPublicId.replace(/\.[^/.]+$/, '')
+    ].filter(Boolean)));
+
+    const ref = String(resumeRef || '');
+    const preferredType = ref.includes('/upload/') ? 'upload' : ref.includes('/authenticated/') ? 'authenticated' : 'upload';
+    const secondaryType = preferredType === 'authenticated' ? 'upload' : 'authenticated';
+
+    const candidates = [
+        { resourceType: 'image', deliveryType: preferredType },
+        { resourceType: 'raw', deliveryType: preferredType },
+        { resourceType: 'image', deliveryType: secondaryType },
+        { resourceType: 'raw', deliveryType: secondaryType }
+    ];
+    let fallbackResolved = null;
+
+    for (const publicId of publicIdCandidates) {
+        for (const c of candidates) {
+            try {
+                const resource = await cloudinary.api.resource(publicId, {
+                    resource_type: c.resourceType,
+                    type: c.deliveryType
+                });
+                const url = generateSignedUrl(
+                    publicId,
+                    c.resourceType,
+                    expirySeconds,
+                    c.deliveryType,
+                    resource?.version || null
+                );
+                if (!url) continue;
+
+                const resolved = {
+                    url,
+                    publicId,
+                    resourceType: c.resourceType,
+                    deliveryType: c.deliveryType
+                };
+
+                // Keep a fallback in case network probe from server is blocked/intermittent.
+                if (!fallbackResolved) fallbackResolved = resolved;
+
+                if (await canAccessSignedUrl(url)) {
+                    return resolved;
+                }
+            } catch {
+                // Try next candidate
+            }
+        }
+    }
+
+    return fallbackResolved;
+};
+
+export {
+    cloudinary,
+    upload,
+    generateSignedUrl,
+    resolveSignedResumeUrl,
+    extractPublicIdFromUrl,
+    isAllowedResumeReference,
+    isCloudinaryResumePublicId,
+    isCloudinaryResumeUrl
+};

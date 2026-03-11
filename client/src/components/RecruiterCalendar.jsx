@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-const API = 'http://localhost:5000/api';
+const API = import.meta.env.VITE_API_URL || '/api';
 const token = () => localStorage.getItem('token');
 const authHdr = () => ({ 'Authorization': `Bearer ${token()}`, 'Content-Type': 'application/json' });
 const apiFetch = async (path, opts = {}) => {
@@ -23,14 +23,21 @@ const apiFetch = async (path, opts = {}) => {
     if (!res.ok) { const e = await res.json().catch(() => ({ message: res.statusText })); throw new Error(e.message); }
     return res.json();
 };
+const normalizeInterviewId = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    return raw.startsWith('iv-') ? raw.slice(3) : raw;
+};
 const CAL_ACCENT = '#4285f4';
 const CAL_ACCENT_SOFT = '#e8f0fe';
 
 /* ── Status palette ─────────────────────────────────────────────────────────── */
 const STATUS = {
     scheduled: { hex: CAL_ACCENT, soft: CAL_ACCENT_SOFT, textColor: '#1d4ed8', label: 'Scheduled' },
+    reschedule_requested: { hex: '#f59e0b', soft: '#fffbeb', textColor: '#b45309', label: 'Reschedule Requested' },
     in_progress: { hex: '#ec4899', soft: '#fce7f3', textColor: '#9d174d', label: 'In Progress' },
     completed: { hex: '#10b981', soft: '#ecfdf5', textColor: '#047857', label: 'Completed' },
+    no_show: { hex: '#f97316', soft: '#fff7ed', textColor: '#9a3412', label: 'No Show' },
     cancelled: { hex: '#ef4444', soft: '#fee2e2', textColor: '#991b1b', label: 'Cancelled' },
     rescheduled: { hex: '#f59e0b', soft: '#fffbeb', textColor: '#b45309', label: 'Rescheduled' },
 };
@@ -180,7 +187,8 @@ function UpcomingCard({ iv, onClick }) {
 }
 
 /* ── Detail Drawer ──────────────────────────────────────────────────────────── */
-function InterviewDrawer({ interview, onClose }) {
+function InterviewDrawer({ interview, onClose, onAttendanceMarked }) {
+    const [attendanceLoading, setAttendanceLoading] = useState(false);
     if (!interview) return null;
     const status = interview.status || 'scheduled';
     const cfg = STATUS[status] || STATUS.scheduled;
@@ -190,6 +198,33 @@ function InterviewDrawer({ interview, onClose }) {
     const end = new Date(endDate || new Date(start.getTime() + 2 * 60 * 60 * 1000));
     const fmtTime = d => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
     const fmtDate = d => d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const canMarkAttendance = ['scheduled', 'in_progress', 'rescheduled'].includes(status);
+
+    const markAttendance = async (attendanceStatus) => {
+        const interviewId = normalizeInterviewId(interview._id || interview.id);
+        if (!interviewId) {
+            toast.error('Interview ID missing');
+            return;
+        }
+
+        setAttendanceLoading(true);
+        try {
+            const response = await apiFetch(`/interviews/${interviewId}/attendance`, {
+                method: 'POST',
+                body: JSON.stringify({ attendanceStatus })
+            });
+            const updated = response?.data?.interview;
+            if (updated) {
+                onAttendanceMarked?.(updated);
+            }
+            toast.success(attendanceStatus === 'present' ? 'Marked as attended' : 'Marked as no-show');
+            onClose();
+        } catch (error) {
+            toast.error(error.message || 'Failed to mark attendance');
+        } finally {
+            setAttendanceLoading(false);
+        }
+    };
 
     return (
         <AnimatePresence>
@@ -311,6 +346,24 @@ function InterviewDrawer({ interview, onClose }) {
 
                 {/* Footer */}
                 <div className="p-6 space-y-3" style={{ borderTop: '1px solid #f1f5f9' }}>
+                    {canMarkAttendance && (
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={() => markAttendance('present')}
+                                disabled={attendanceLoading}
+                                className="py-2.5 rounded-xl font-black text-white text-xs bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+                            >
+                                Mark Attended
+                            </button>
+                            <button
+                                onClick={() => markAttendance('absent')}
+                                disabled={attendanceLoading}
+                                className="py-2.5 rounded-xl font-black text-white text-xs bg-orange-600 hover:bg-orange-700 disabled:opacity-60 transition-colors"
+                            >
+                                Mark No-Show
+                            </button>
+                        </div>
+                    )}
                     {interview.meetingLink && (
                         <a href={interview.meetingLink} target="_blank" rel="noreferrer">
                             <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
@@ -453,6 +506,25 @@ export function RecruiterCalendar() {
         }
     }, [fetchData]);
 
+    useEffect(() => {
+        if (!interviews.length) return;
+        const params = new URLSearchParams(window.location.search);
+        const interviewId = params.get('interview');
+        if (!interviewId) return;
+        const normalizedId = normalizeInterviewId(interviewId);
+        const match = interviews.find((iv) => {
+            const id = normalizeInterviewId(iv.id || iv._id);
+            return id === normalizedId;
+        });
+        if (match) {
+            setSelected(match);
+            const date = match.start || match.scheduledAt || match.date;
+            if (date && calRef.current?.getApi) {
+                calRef.current.getApi().gotoDate(date);
+            }
+        }
+    }, [interviews]);
+
     const now = new Date();
     const today = interviews.filter(iv => {
         const date = iv.start || iv.scheduledAt || iv.date;
@@ -466,6 +538,24 @@ export function RecruiterCalendar() {
         })
         .sort((a, b) => new Date(a.start || a.scheduledAt || a.date) - new Date(b.start || b.scheduledAt || b.date)).slice(0, 5);
     const done = interviews.filter(iv => (iv.status || 'scheduled') === 'completed').length;
+    const handleAttendanceMarked = (updatedInterview) => {
+        const updatedId = normalizeInterviewId(updatedInterview?._id || updatedInterview?.id);
+        if (!updatedId) return;
+
+        setInterviews((prev) => prev.map((iv) => {
+            const id = normalizeInterviewId(iv._id || iv.id);
+            return id === updatedId
+                ? { ...iv, ...updatedInterview, id: iv.id || `iv-${updatedId}`, _id: updatedId }
+                : iv;
+        }));
+        setSelected((prev) => {
+            if (!prev) return prev;
+            const id = normalizeInterviewId(prev._id || prev.id);
+            return id === updatedId
+                ? { ...prev, ...updatedInterview, id: prev.id || `iv-${updatedId}`, _id: updatedId }
+                : prev;
+        });
+    };
 
     const calEvents = interviews.map(iv => {
         // Handle both formats: calendar event format and legacy interview format
@@ -683,7 +773,11 @@ export function RecruiterCalendar() {
                 </div>
             </div>
 
-            <InterviewDrawer interview={selected} onClose={() => setSelected(null)} />
+            <InterviewDrawer
+                interview={selected}
+                onClose={() => setSelected(null)}
+                onAttendanceMarked={handleAttendanceMarked}
+            />
         </div>
     );
 }

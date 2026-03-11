@@ -21,6 +21,8 @@ const transporter = nodemailer.createTransport({
 
 export const sendInterviewNotifications = async (data) => {
   const { candidate, recruiter, admin, date, time, meetingLink } = data;
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const acknowledgementUrl = `${clientUrl}/candidate-calendar`;
 
   const participants = [
     { role: 'Candidate', email: candidate.email, name: candidate.name },
@@ -43,6 +45,16 @@ export const sendInterviewNotifications = async (data) => {
             <p><strong>Time:</strong> ${time}</p>
             <p><strong>Google Meet Link:</strong> <a href="${meetingLink}">${meetingLink}</a></p>
           </div>
+          ${participant.role === 'Candidate' ? `
+            <div style="margin-top:16px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:12px;">
+              <p style="margin:0 0 8px 0; font-weight:bold; color:#1e3a8a;">
+                Please acknowledge your availability
+              </p>
+              <a href="${acknowledgementUrl}" style="display:inline-block; background:#1d4ed8; color:#fff; text-decoration:none; padding:10px 14px; border-radius:6px; font-weight:bold;">
+                Open Calendar & Confirm
+              </a>
+            </div>
+          ` : ''}
           <p style="margin-top: 20px;">Please join 10 minutes early and keep your internet connection stable.</p>
           <p>Best regards,<br/>RecruitPro Team</p>
         </div>

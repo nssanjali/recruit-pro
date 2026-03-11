@@ -24,7 +24,8 @@ import {
     BarChart3,
     ThumbsUp,
     ThumbsDown,
-    MessageSquare
+    MessageSquare,
+    Lock
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Textarea } from './ui';
 import {
@@ -32,7 +33,8 @@ import {
     updateApplicationStatus,
     reanalyzeApplication,
     submitInterviewReview,
-    uploadFile
+    uploadFile,
+    getSecureResumeUrl
 } from '../lib/api';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
@@ -52,6 +54,7 @@ export function ApplicationReview() {
     const [transcriptFile, setTranscriptFile] = useState(null);
     const [transcriptText, setTranscriptText] = useState('');
     const [insightMode, setInsightMode] = useState('strengths');
+    const [resumeLoading, setResumeLoading] = useState(false);
 
     const currentUserRole = (() => {
         try {
@@ -60,6 +63,8 @@ export function ApplicationReview() {
             return '';
         }
     })();
+    const isCompanyAdminView = ['company_admin', 'super_admin'].includes(currentUserRole);
+    const canUpdateApplicationStatus = ['company_admin', 'super_admin'].includes(currentUserRole);
 
     useEffect(() => {
         loadApplication();
@@ -89,6 +94,10 @@ export function ApplicationReview() {
     };
 
     const handleStatusUpdate = async (status) => {
+        if (!canUpdateApplicationStatus) {
+            toast.error('Only company admins can update application status');
+            return;
+        }
         if (
             currentUserRole === 'recruiter' &&
             ['accepted', 'rejected'].includes(status) &&
@@ -100,11 +109,27 @@ export function ApplicationReview() {
         }
         try {
             setProcessing(true);
-            await updateApplicationStatus(id, {
+            const response = await updateApplicationStatus(id, {
                 status,
                 reviewNotes: notes
             });
-            toast.success(`Application ${status}`);
+
+            if (status === 'shortlisted') {
+                if (response?.interviewScheduled) {
+                    toast.success(response?.message || 'Application shortlisted and interview scheduled');
+                    await loadApplication();
+                    navigate(-1);
+                } else {
+                    if (response?.schedulingDiagnostics) {
+                        console.warn('Scheduling diagnostics:', response.schedulingDiagnostics);
+                    }
+                    toast.info(response?.message || 'Application shortlisted. Interview scheduling is pending.');
+                    await loadApplication();
+                }
+                return;
+            }
+
+            toast.success(response?.message || `Application ${status}`);
             navigate(-1);
         } catch (error) {
             console.error('Error updating status:', error);
@@ -143,7 +168,10 @@ export function ApplicationReview() {
             toast.error('Please add recruiter interview review notes');
             return;
         }
-        if (!transcriptFile && !transcriptText.trim() && !interviewReview?.transcript?.url) {
+
+        const isAbsent = interviewRecommendation === 'absent';
+
+        if (!isAbsent && !transcriptFile && !transcriptText.trim() && !interviewReview?.transcript?.url) {
             toast.error('Please upload transcript PDF or paste transcript text');
             return;
         }
@@ -153,7 +181,7 @@ export function ApplicationReview() {
             let transcriptUrl = interviewReview?.transcript?.url || '';
             let transcriptName = interviewReview?.transcript?.name || '';
 
-            if (transcriptFile) {
+            if (!isAbsent && transcriptFile) {
                 transcriptUrl = await uploadFile(transcriptFile, 'file');
                 transcriptName = transcriptFile.name;
             }
@@ -161,12 +189,16 @@ export function ApplicationReview() {
             await submitInterviewReview(interview._id, {
                 recruiterRecommendation: interviewRecommendation,
                 reviewNotes: interviewReviewNotes.trim(),
-                transcriptUrl,
-                transcriptText: transcriptText.trim() || undefined,
-                transcriptName
+                transcriptUrl: isAbsent ? undefined : transcriptUrl,
+                transcriptText: isAbsent ? undefined : (transcriptText.trim() || undefined),
+                transcriptName: isAbsent ? undefined : transcriptName
             });
 
-            toast.success('Interview review submitted and AI analysis generated');
+            toast.success(
+                isAbsent
+                    ? 'Candidate marked absent - reliability credits have been deducted'
+                    : 'Interview review submitted and AI analysis generated'
+            );
             await loadApplication();
         } catch (error) {
             console.error('Interview review submit error:', error);
@@ -235,11 +267,46 @@ export function ApplicationReview() {
     const interview = application.interview || null;
     const interviewReview = application.interviewReview || interview?.interviewReview || null;
     const interviewAi = application.interviewAiAnalysis || interview?.aiInterviewAnalysis || null;
+    const toNormalizedScore = (value) => {
+        const score = Number(value);
+        if (!Number.isFinite(score)) return null;
+        return Math.max(0, Math.min(100, score));
+    };
+    const deriveRecruiterReviewScore = () => {
+        const directScore = toNormalizedScore(interviewReview?.score ?? interviewReview?.overallScore);
+        if (directScore !== null) return Math.round(directScore);
+
+        const ratingValues = Object.values(interviewReview?.ratings || {})
+            .map((value) => Number(value))
+            .filter((value) => Number.isFinite(value) && value >= 0);
+        if (ratingValues.length > 0) {
+            const maxRatingValue = Math.max(...ratingValues);
+            const normalized = maxRatingValue <= 5
+                ? ratingValues.map((value) => value * 20)
+                : ratingValues;
+            const avg = normalized.reduce((sum, value) => sum + value, 0) / normalized.length;
+            return Math.round(Math.max(0, Math.min(100, avg)));
+        }
+
+        const rec = String(interviewReview?.recruiterRecommendation || '').toLowerCase();
+        if (rec === 'hire') return 85;
+        if (rec === 'consider') return 65;
+        if (rec === 'reject') return 40;
+        return null;
+    };
+    const initialShortlistScore = Math.round(toNormalizedScore(matchScore) ?? 0);
+    const recruiterReviewScore = deriveRecruiterReviewScore();
+    const interviewAiScore = toNormalizedScore(interviewAi?.score);
+    const hasAllSelectionScores = recruiterReviewScore !== null && interviewAiScore !== null;
+    const adminSelectionAverage = hasAllSelectionScores
+        ? Math.round((initialShortlistScore + recruiterReviewScore + interviewAiScore) / 3)
+        : null;
     const hasInterviewReview = Boolean(interviewReview);
     const interviewEndTime = interview?.endsAt || interview?.scheduledAt || null;
     const interviewUnlocked = interviewEndTime ? new Date(interviewEndTime).getTime() <= Date.now() : false;
     const interviewUnlockLabel = interviewEndTime ? new Date(interviewEndTime).toLocaleString() : 'interview completion';
-    const requiresInterviewDecisionFlow = currentUserRole === 'recruiter' && Boolean(interview);
+    const canReviewInterview = ['recruiter', 'company_admin', 'admin', 'super_admin'].includes(currentUserRole);
+    const requiresInterviewDecisionFlow = canReviewInterview && Boolean(interview);
     const canSubmitInterviewReview = requiresInterviewDecisionFlow && interviewUnlocked;
     const canFinalizeDecision = !requiresInterviewDecisionFlow || hasInterviewReview;
     const statusBadgeClass = normalizedStatus === 'accepted'
@@ -530,30 +597,47 @@ export function ApplicationReview() {
                             })()}
 
 
-                            {/* Resume */}
+                            {/* Resume — secure access via signed URL */}
                             {application.resume && (
                                 <div>
                                     <h4 className="font-black text-slate-900 mb-3 flex items-center gap-2">
                                         <FileText className="w-5 h-5 text-blue-600" />
                                         Resume
                                     </h4>
-                                    <a
-                                        href={application.resume}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center justify-between p-4 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors group"
+                                    <button
+                                        type="button"
+                                        disabled={resumeLoading}
+                                        onClick={async () => {
+                                            try {
+                                                setResumeLoading(true);
+                                                const signedUrl = await getSecureResumeUrl(id);
+                                                window.open(signedUrl, '_blank', 'noopener,noreferrer');
+                                            } catch (err) {
+                                                toast.error(err.message || 'Could not open resume');
+                                            } finally {
+                                                setResumeLoading(false);
+                                            }
+                                        }}
+                                        className="w-full flex items-center justify-between p-4 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors group disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center">
                                                 <FileText className="w-6 h-6 text-white" />
                                             </div>
-                                            <div>
+                                            <div className="text-left">
                                                 <p className="font-bold text-blue-900">Resume.pdf</p>
-                                                <p className="text-xs text-blue-600">Click to view</p>
+                                                <p className="text-xs text-blue-600 flex items-center gap-1">
+                                                    <Lock className="w-3 h-3" />
+                                                    {resumeLoading ? 'Generating secure link...' : 'Secure access — click to view'}
+                                                </p>
                                             </div>
                                         </div>
-                                        <Download className="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" />
-                                    </a>
+                                        {resumeLoading ? (
+                                            <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                        ) : (
+                                            <Download className="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" />
+                                        )}
+                                    </button>
                                 </div>
                             )}
                         </CardContent>
@@ -575,6 +659,21 @@ export function ApplicationReview() {
                                 <span className="text-sm font-bold text-slate-700">Final Score</span>
                                 <span className="text-xl font-black text-blue-600">{matchScore}%</span>
                             </div>
+                            {isCompanyAdminView && (
+                                <div className="p-3 rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm font-bold text-emerald-800">Selection Average (3 Metrics)</span>
+                                        <span className="text-xl font-black text-emerald-700">
+                                            {adminSelectionAverage !== null ? `${adminSelectionAverage}%` : 'Pending'}
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] font-semibold text-emerald-700">
+                                        {adminSelectionAverage !== null
+                                            ? `Initial ${initialShortlistScore}% | Recruiter ${recruiterReviewScore}% | Interview AI ${Math.round(interviewAiScore)}%`
+                                            : `Initial ${initialShortlistScore}% | waiting for recruiter review score and interview AI score`}
+                                    </p>
+                                </div>
+                            )}
                             <div className="rounded-xl border border-slate-200 bg-white p-3">
                                 <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">
                                     <span>AI Confidence Meter</span>
@@ -636,7 +735,7 @@ export function ApplicationReview() {
                                 </div>
 
                                 <div>
-                                    <label className="text-xs font-bold text-slate-600">Recommendation</label>
+                                    <label className="text-xs font-bold text-slate-600">Outcome / Recommendation</label>
                                     <select
                                         value={interviewRecommendation}
                                         onChange={(e) => setInterviewRecommendation(e.target.value)}
@@ -646,7 +745,16 @@ export function ApplicationReview() {
                                         <option value="hire">Hire</option>
                                         <option value="consider">Consider</option>
                                         <option value="reject">Reject</option>
+                                        <option value="absent">Absent (No-Show)</option>
                                     </select>
+                                    {interviewRecommendation === 'absent' && (
+                                        <div className="mt-2 p-3 rounded-xl bg-red-50 border border-red-200">
+                                            <p className="text-xs font-bold text-red-700">No-Show Penalty</p>
+                                            <p className="text-xs text-red-600 mt-1">
+                                                Selecting <strong>Absent</strong> will deduct <strong>20 reliability credits</strong> from the candidate and automatically reject the application. No transcript is required.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <Textarea
@@ -657,44 +765,54 @@ export function ApplicationReview() {
                                     disabled={!canSubmitInterviewReview || submittingInterviewReview}
                                 />
 
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-600">Transcript PDF (Upload)</label>
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="file"
-                                            accept=".pdf"
-                                            onChange={(e) => setTranscriptFile(e.target.files?.[0] || null)}
-                                            disabled={!canSubmitInterviewReview || submittingInterviewReview}
-                                            className="w-full text-xs"
-                                        />
-                                    </div>
-                                    {interviewReview?.transcript?.url && !transcriptFile && (
-                                        <a
-                                            href={interviewReview.transcript.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-xs font-bold text-blue-600 hover:underline"
-                                        >
-                                            View submitted transcript
-                                        </a>
-                                    )}
-                                </div>
+                                {interviewRecommendation !== 'absent' && (
+                                    <>
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-slate-600">Transcript PDF (Upload)</label>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="file"
+                                                    accept=".pdf"
+                                                    onChange={(e) => setTranscriptFile(e.target.files?.[0] || null)}
+                                                    disabled={!canSubmitInterviewReview || submittingInterviewReview}
+                                                    className="w-full text-xs"
+                                                />
+                                            </div>
+                                            {interviewReview?.transcript?.url && !transcriptFile && (
+                                                <a
+                                                    href={interviewReview.transcript.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-xs font-bold text-blue-600 hover:underline"
+                                                >
+                                                    View submitted transcript
+                                                </a>
+                                            )}
+                                        </div>
 
-                                <Textarea
-                                    value={transcriptText}
-                                    onChange={(e) => setTranscriptText(e.target.value)}
-                                    placeholder="Optional: paste transcript text here if PDF is unavailable"
-                                    rows={3}
-                                    disabled={!canSubmitInterviewReview || submittingInterviewReview}
-                                />
+                                        <Textarea
+                                            value={transcriptText}
+                                            onChange={(e) => setTranscriptText(e.target.value)}
+                                            placeholder="Optional: paste transcript text here if PDF is unavailable"
+                                            rows={3}
+                                            disabled={!canSubmitInterviewReview || submittingInterviewReview}
+                                        />
+                                    </>
+                                )}
 
                                 <Button
                                     onClick={handleSubmitInterviewReview}
                                     disabled={!canSubmitInterviewReview || submittingInterviewReview}
-                                    className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-bold"
+                                    className={`w-full font-bold text-white ${interviewRecommendation === 'absent' ? 'bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700' : 'bg-gradient-to-r from-indigo-600 to-blue-600'}`}
                                 >
                                     <Upload className="w-4 h-4 mr-2" />
-                                    {submittingInterviewReview ? 'Submitting...' : hasInterviewReview ? 'Update Final Interview Review' : 'Submit Final Interview Review'}
+                                    {submittingInterviewReview
+                                        ? 'Submitting...'
+                                        : interviewRecommendation === 'absent'
+                                            ? 'Mark as Absent & Deduct Credits'
+                                            : hasInterviewReview
+                                                ? 'Update Final Interview Review'
+                                                : 'Submit Final Interview Review'}
                                 </Button>
 
                                 {hasInterviewReview && interviewAi && (
@@ -732,44 +850,52 @@ export function ApplicationReview() {
                             <CardTitle className="text-lg font-black">Actions</CardTitle>
                         </CardHeader>
                         <CardContent className="p-6 space-y-3">
-                            <Button
-                                onClick={() => handleStatusUpdate('accepted')}
-                                disabled={processing || normalizedStatus === 'accepted' || !canFinalizeDecision}
-                                className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold h-12 transition-transform hover:-translate-y-0.5"
-                            >
-                                <CheckCircle2 className="w-5 h-5 mr-2" />
-                                Accept Application
-                            </Button>
-                            <Button
-                                onClick={() => handleStatusUpdate('shortlisted')}
-                                disabled={processing || normalizedStatus === 'shortlisted' || normalizedStatus === 'interview_scheduled'}
-                                variant="outline"
-                                className="w-full border-2 border-violet-200 text-violet-700 hover:bg-violet-50 font-bold h-12 transition-transform hover:-translate-y-0.5"
-                            >
-                                <Target className="w-5 h-5 mr-2" />
-                                Shortlist for Interview
-                            </Button>
-                            <Button
-                                onClick={() => handleStatusUpdate('rejected')}
-                                disabled={processing || normalizedStatus === 'rejected' || !canFinalizeDecision}
-                                variant="outline"
-                                className="w-full border-2 border-red-200 text-red-600 hover:bg-red-50 font-bold h-12 transition-transform hover:-translate-y-0.5"
-                            >
-                                <XCircle className="w-5 h-5 mr-2" />
-                                Reject Application
-                            </Button>
-                            <Button
-                                onClick={() => handleStatusUpdate('pending')}
-                                disabled={processing}
-                                variant="outline"
-                                className="w-full font-bold h-12 transition-transform hover:-translate-y-0.5"
-                            >
-                                <Clock className="w-5 h-5 mr-2" />
-                                Mark as Pending
-                            </Button>
-                            {!canFinalizeDecision && (
-                                <p className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">
-                                    Final decisions (Accept/Reject) unlock after recruiter submits post-interview review and transcript analysis.
+                            {canUpdateApplicationStatus ? (
+                                <>
+                                    <Button
+                                        onClick={() => handleStatusUpdate('accepted')}
+                                        disabled={processing || normalizedStatus === 'accepted' || !canFinalizeDecision}
+                                        className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold h-12 transition-transform hover:-translate-y-0.5"
+                                    >
+                                        <CheckCircle2 className="w-5 h-5 mr-2" />
+                                        Accept Application
+                                    </Button>
+                                    <Button
+                                        onClick={() => handleStatusUpdate('shortlisted')}
+                                        disabled={processing || normalizedStatus === 'shortlisted' || normalizedStatus === 'interview_scheduled'}
+                                        variant="outline"
+                                        className="w-full border-2 border-violet-200 text-violet-700 hover:bg-violet-50 font-bold h-12 transition-transform hover:-translate-y-0.5"
+                                    >
+                                        <Target className="w-5 h-5 mr-2" />
+                                        Shortlist & Schedule Interview
+                                    </Button>
+                                    <Button
+                                        onClick={() => handleStatusUpdate('rejected')}
+                                        disabled={processing || normalizedStatus === 'rejected' || !canFinalizeDecision}
+                                        variant="outline"
+                                        className="w-full border-2 border-red-200 text-red-600 hover:bg-red-50 font-bold h-12 transition-transform hover:-translate-y-0.5"
+                                    >
+                                        <XCircle className="w-5 h-5 mr-2" />
+                                        Reject Application
+                                    </Button>
+                                    <Button
+                                        onClick={() => handleStatusUpdate('pending')}
+                                        disabled={processing}
+                                        variant="outline"
+                                        className="w-full font-bold h-12 transition-transform hover:-translate-y-0.5"
+                                    >
+                                        <Clock className="w-5 h-5 mr-2" />
+                                        Mark as Pending
+                                    </Button>
+                                    {!canFinalizeDecision && (
+                                        <p className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">
+                                            Final decisions (Accept/Reject) unlock after recruiter submits post-interview review and transcript analysis.
+                                        </p>
+                                    )}
+                                </>
+                            ) : (
+                                <p className="text-sm font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                    Application status can only be changed by company admins.
                                 </p>
                             )}
                         </CardContent>

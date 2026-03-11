@@ -23,6 +23,11 @@ const apiFetch = async (path, opts = {}) => {
     if (!res.ok) { const e = await res.json().catch(() => ({ message: res.statusText })); throw new Error(e.message); }
     return res.json();
 };
+const normalizeInterviewId = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    return raw.startsWith('iv-') ? raw.slice(3) : raw;
+};
 const CAL_ACCENT = '#4285f4';
 const CAL_ACCENT_SOFT = '#e8f0fe';
 
@@ -321,6 +326,24 @@ export function AdminCalendar() {
     }, []);
 
     useEffect(() => { fetchData(); }, [fetchData]);
+
+    useEffect(() => {
+        if (!events.length) return;
+        const params = new URLSearchParams(window.location.search);
+        const interviewId = params.get('interview');
+        if (!interviewId) return;
+        const normalizedId = normalizeInterviewId(interviewId);
+        const match = events.find((ev) => {
+            if (ev.type !== 'interview') return false;
+            return normalizeInterviewId(ev.id) === normalizedId;
+        });
+        if (match) {
+            setSelected(match);
+            if (match.date && calRef.current?.getApi) {
+                calRef.current.getApi().gotoDate(match.date);
+            }
+        }
+    }, [events]);
 
     const now = new Date();
     const upcoming = events

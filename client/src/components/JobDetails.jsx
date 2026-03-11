@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getJob, applyJob, uploadFile, updateUserDetails } from '../lib/api';
+import { getJob, applyJob, uploadFile, updateUserDetails, getMySecureResumeUrl } from '../lib/api';
 import { Card, Button, Badge, Input, Tabs, TabsList, TabsTrigger, TabsContent, Progress } from './ui';
 import {
     Briefcase, MapPin, Building, Clock, DollarSign, ArrowLeft,
-    CheckCircle2, Upload, FileText, Send, Loader
+    CheckCircle2, Upload, FileText, Send, Loader, ShieldAlert, ShieldBan, AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
@@ -19,7 +19,20 @@ export function JobDetails({ user }) {
     const [submitting, setSubmitting] = useState(false);
     const [applied, setApplied] = useState(false);
     const [uploadingResume, setUploadingResume] = useState(false);
+    const [openingResume, setOpeningResume] = useState(false);
     const applicationFormRef = useRef(null);
+
+    // Reliability restriction check (read from user prop)
+    const reliability = user?.interviewReliability || null;
+    const isBanned = Boolean(reliability?.isBanned);
+    const isRestricted = Boolean(reliability?.restrictedUntil) && new Date(reliability.restrictedUntil) > new Date();
+    const restrictedUntilDate = isRestricted ? new Date(reliability.restrictedUntil) : null;
+    const restrictionBlocked = isBanned || isRestricted;
+    const restrictionMessage = isBanned
+        ? 'Your account has been banned due to repeated interview no-shows. You cannot apply for jobs.'
+        : isRestricted
+        ? `Your account is temporarily restricted from applying until ${restrictedUntilDate?.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}.`
+        : null;
 
     // Application form data
     const [formData, setFormData] = useState({
@@ -129,9 +142,6 @@ export function JobDetails({ user }) {
 
         for (const field of mandatoryFields) {
             if (!field?.required) continue;
-            if (field.id === 'resume' && !formData.resume) {
-                nextErrors.resume = 'Resume is required';
-            }
             if (field.id === 'name' && !formData.name.trim()) {
                 nextErrors.name = 'Full name is required';
             }
@@ -187,7 +197,15 @@ export function JobDetails({ user }) {
             setShowApplicationForm(false);
             toast.success('Application submitted successfully!');
         } catch (error) {
-            toast.error(error.message || 'Failed to submit application');
+            // Make restriction errors more readable
+            const msg = error.message || 'Failed to submit application';
+            if (msg.includes('restricted') || msg.includes('banned')) {
+                toast.error(msg.replace(/\d{4}-\d{2}-\d{2}T[\d:.Z]+/, (iso) =>
+                    new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+                ), { duration: 6000 });
+            } else {
+                toast.error(msg);
+            }
         } finally {
             setSubmitting(false);
         }
@@ -195,8 +213,10 @@ export function JobDetails({ user }) {
 
     const getMandatoryField = (fieldId) => {
         const mandatoryFields = Object.values(job?.applicationFormConfig?.mandatoryFields || {});
-        return mandatoryFields.find(f => f.id === fieldId) ||
-            { id: fieldId, enabled: true, required: true };
+        const existing = mandatoryFields.find(f => f.id === fieldId);
+        if (existing) return existing;
+        if (fieldId === 'resume') return { id: fieldId, enabled: true, required: false };
+        return { id: fieldId, enabled: true, required: true };
     };
 
     useEffect(() => {
@@ -431,15 +451,25 @@ export function JobDetails({ user }) {
                                                         )}
                                                     </Button>
                                                     {formData.resume && (
-                                                        <a
-                                                            href={formData.resume}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1"
+                                                        <button
+                                                            type="button"
+                                                            onClick={async () => {
+                                                                try {
+                                                                    setOpeningResume(true);
+                                                                    const signedUrl = await getMySecureResumeUrl();
+                                                                    window.open(signedUrl, '_blank', 'noopener,noreferrer');
+                                                                } catch (error) {
+                                                                    toast.error(error.message || 'Failed to open resume');
+                                                                } finally {
+                                                                    setOpeningResume(false);
+                                                                }
+                                                            }}
+                                                            disabled={openingResume}
+                                                            className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1 disabled:opacity-60"
                                                         >
                                                             <FileText className="w-4 h-4" />
-                                                            View uploaded resume
-                                                        </a>
+                                                            {openingResume ? 'Opening resume...' : 'View uploaded resume'}
+                                                        </button>
                                                     )}
                                                 </div>
                                                 {formErrors.resume && <p className="text-xs text-red-600">{formErrors.resume}</p>}
@@ -513,10 +543,35 @@ export function JobDetails({ user }) {
                                     <CheckCircle2 className="w-5 h-5" />
                                     Applied Successfully
                                 </div>
+                            ) : restrictionBlocked ? (
+                                <div className={`p-4 rounded-xl border-2 space-y-2 ${isBanned ? 'bg-red-50 border-red-300' : 'bg-amber-50 border-amber-300'}`}>
+                                    <div className={`flex items-center gap-2 font-bold text-sm ${isBanned ? 'text-red-700' : 'text-amber-700'}`}>
+                                        {isBanned ? <ShieldBan className="w-5 h-5 shrink-0" /> : <ShieldAlert className="w-5 h-5 shrink-0" />}
+                                        {isBanned ? 'Account Banned' : 'Account Restricted'}
+                                    </div>
+                                    <p className={`text-xs leading-relaxed ${isBanned ? 'text-red-600' : 'text-amber-600'}`}>
+                                        {restrictionMessage}
+                                    </p>
+                                    {!isBanned && restrictedUntilDate && (
+                                        <p className="text-xs font-bold text-amber-700">
+                                            Restriction lifts: {restrictedUntilDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                        </p>
+                                    )}
+                                    <Button
+                                        disabled
+                                        className="w-full mt-1 opacity-50 cursor-not-allowed bg-slate-300 text-slate-600 h-10 font-bold rounded-xl"
+                                    >
+                                        Cannot Apply
+                                    </Button>
+                                </div>
                             ) : (
                                 <Button
                                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 rounded-xl shadow-sm"
                                     onClick={() => {
+                                        if (restrictionBlocked) {
+                                            toast.error(restrictionMessage, { duration: 5000 });
+                                            return;
+                                        }
                                         setShowApplicationForm(true);
                                         if (applicationFormRef.current) {
                                             applicationFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });

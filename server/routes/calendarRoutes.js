@@ -6,6 +6,8 @@ import {
     getRecruiterCalendarData,
     getSettings,
     updateSettings,
+    getCandidateSettings,
+    updateCandidateSettings,
     authGoogleCalendar,
     getGoogleCalendarStatus,
     googleCalendarCallback
@@ -21,6 +23,8 @@ router.get('/data/recruiter', protect, authorize('recruiter'), getRecruiterCalen
 // Settings and Auth
 router.get('/settings', protect, authorize('recruiter'), getSettings);
 router.put('/settings', protect, authorize('recruiter'), updateSettings);
+router.get('/settings/candidate', protect, authorize('candidate'), getCandidateSettings);
+router.put('/settings/candidate', protect, authorize('candidate'), updateCandidateSettings);
 router.get('/status', protect, authorize('recruiter', 'company_admin', 'admin'), getGoogleCalendarStatus);
 router.get('/auth', protect, authorize('recruiter', 'company_admin', 'admin'), authGoogleCalendar);
 router.get('/callback', googleCalendarCallback);

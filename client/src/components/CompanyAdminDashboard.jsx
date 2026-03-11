@@ -461,14 +461,6 @@ export function CompanyAdminDashboard({ user }) {
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"
-                                                                className="font-bold"
-                                                                onClick={() => navigate(`/edit-job/${job._id}`)}
-                                                            >
-                                                                Edit Draft
-                                                            </Button>
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
                                                                 className="font-bold text-red-600 hover:text-red-700 hover:bg-red-50"
                                                                 onClick={async () => {
                                                                     if (window.confirm('Are you sure you want to delete this draft?')) {
@@ -482,7 +474,7 @@ export function CompanyAdminDashboard({ user }) {
                                                                     }
                                                                 }}
                                                             >
-                                                                Delete
+                                                                Delete Draft
                                                             </Button>
                                                         </>
                                                     ) : (

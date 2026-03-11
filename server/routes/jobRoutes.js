@@ -9,7 +9,8 @@ import {
     applyJob,
     checkJobMatch,
     getMappedRecruiters,
-    retrySchedulingForCompanyAdmin
+    retrySchedulingForCompanyAdmin,
+    analyzeCandidateRoleFit
 } from '../controllers/jobController.js';
 import { protect, authorize } from '../middleware/auth.js';
 
@@ -18,6 +19,9 @@ const router = express.Router();
 router.route('/')
     .get(protect, authorize('admin', 'recruiter', 'company_admin', 'candidate'), getJobs)
     .post(protect, authorize('company_admin'), createJob); // Only company_admin can post jobs
+
+router.route('/role-fit/analyze')
+    .post(protect, authorize('candidate'), analyzeCandidateRoleFit);
 
 router.route('/:id')
     .get(getJob)

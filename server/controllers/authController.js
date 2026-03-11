@@ -1,6 +1,27 @@
 import crypto from 'crypto';
 import User from '../models/User.js';
 import { sendOTP } from '../services/notificationService.js';
+import { cloudinary, resolveSignedResumeUrl, isAllowedResumeReference } from '../config/cloudinary.js';
+
+const toPublicResumeUrl = (resumeRef = '') => {
+    const ref = String(resumeRef || '').trim();
+    if (!ref) return '';
+
+    if (ref.startsWith('http')) {
+        if (ref.includes('/authenticated/')) {
+            return ref
+                .replace('/authenticated/', '/upload/')
+                .replace(/\/s--[^/]+--\//, '/');
+        }
+        return ref;
+    }
+
+    return cloudinary.url(ref, {
+        resource_type: 'image',
+        type: 'upload',
+        secure: true
+    });
+};
 
 // @desc    Register user
 // @route   POST /api/auth/register
@@ -208,6 +229,59 @@ export const getMe = async (req, res) => {
     }
 };
 
+// @desc    Get a short-lived signed URL for resume (current user or provided reference)
+// @route   GET /api/auth/me/resume-url
+// @access  Public (temporary)
+export const getMySecureResumeUrl = async (req, res) => {
+    try {
+        let resumeRef = String(req.query?.resume || '').trim();
+
+        // If authenticated context exists, prefer profile resume
+        if (!resumeRef && req.user?._id) {
+            const user = await User.findById(req.user._id);
+            resumeRef = user?.resume ? String(user.resume).trim() : '';
+        }
+
+        if (!resumeRef) {
+            return res.status(404).json({
+                success: false,
+                message: 'No resume found. Provide ?resume=<reference> or use an authenticated profile.'
+            });
+        }
+
+        if (!isAllowedResumeReference(resumeRef)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Resume reference is invalid. Please re-upload your resume.'
+            });
+        }
+
+        let finalUrl = toPublicResumeUrl(resumeRef);
+        if (!finalUrl) {
+            const resolved = await resolveSignedResumeUrl(resumeRef, 300);
+            finalUrl = resolved?.url || '';
+        }
+        if (!finalUrl) {
+            return res.status(500).json({
+                success: false,
+                message: 'Could not generate resume URL'
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            url: finalUrl,
+            expiresIn: 300
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: 'Error generating secure resume URL',
+            error: error.message
+        });
+    }
+};
+
 // @desc    Logout user / clear cookie
 // @route   GET /api/auth/logout
 // @access  Private
@@ -238,7 +312,15 @@ export const updateDetails = async (req, res) => {
         if (req.user.role === 'candidate') {
             if (req.body.skills !== undefined) fieldsToUpdate.skills = req.body.skills;
             if (req.body.experience !== undefined) fieldsToUpdate.experience = req.body.experience;
-            if (req.body.resume !== undefined) fieldsToUpdate.resume = req.body.resume;
+            if (req.body.resume !== undefined) {
+                if (req.body.resume && !isAllowedResumeReference(req.body.resume)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Invalid resume reference. Please upload resume using the secure upload endpoint.'
+                    });
+                }
+                fieldsToUpdate.resume = req.body.resume;
+            }
         } else if (req.user.role === 'recruiter') {
             if (req.body.department !== undefined) fieldsToUpdate.department = req.body.department;
             if (req.body.specialization !== undefined) fieldsToUpdate.specialization = req.body.specialization;
@@ -441,7 +523,8 @@ const sendTokenResponse = (user, statusCode, res) => {
             ...(user.role === 'candidate' && {
                 skills: user.skills,
                 experience: user.experience,
-                resume: user.resume
+                resume: user.resume,
+                interviewReliability: user.interviewReliability
             }),
             ...(user.role === 'recruiter' && {
                 department: user.department,

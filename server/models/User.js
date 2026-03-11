@@ -5,6 +5,19 @@ import { getDb } from '../config/db.js';
 
 const getCollection = () => getDb().collection('users');
 
+const getDefaultInterviewReliability = () => ({
+    credits: 100,
+    totalNoShows: 0,
+    noShowsLast90Days: 0,
+    noShowEvents: [],
+    restrictionLevel: 'none',
+    restrictedUntil: null,
+    isBanned: false,
+    banReason: null,
+    lastNoShowAt: null,
+    lastUpdatedAt: new Date()
+});
+
 export const User = {
     async findOne(query) {
         return await getCollection().findOne(query);
@@ -39,6 +52,10 @@ export const User = {
         if (data.password) {
             const salt = await bcrypt.genSalt(10);
             data.password = await bcrypt.hash(data.password, salt);
+        }
+
+        if (data.role === 'candidate') {
+            data.interviewReliability = userData.interviewReliability || getDefaultInterviewReliability();
         }
 
         const result = await getCollection().insertOne(data);
