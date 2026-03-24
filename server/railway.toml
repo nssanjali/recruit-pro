@@ -1,0 +1,13 @@
+# Railway deployment configuration
+# Railway auto-detects Node.js and uses package.json scripts
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "node index.js"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+healthcheckPath = "/"
+healthcheckTimeout = 30
