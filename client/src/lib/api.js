@@ -1,4 +1,7 @@
-const API_URL = import.meta.env.VITE_API_URL || '/api';
+// In production, never use a localhost URL even if VITE_API_URL was accidentally set to one.
+const _rawApiUrl = import.meta.env.VITE_API_URL || '';
+const _isLocalhost = _rawApiUrl.includes('localhost') || _rawApiUrl.includes('127.0.0.1');
+const API_URL = (_rawApiUrl && !_isLocalhost) ? _rawApiUrl : '/api';
 
 const apiFetch = async (url, options = {}) => {
     try {
