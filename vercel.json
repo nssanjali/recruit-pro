@@ -16,20 +16,6 @@
       "maxDuration": 60
     }
   },
-  "crons": [
-    {
-      "path": "/api/cron/communications",
-      "schedule": "*/10 * * * *"
-    },
-    {
-      "path": "/api/cron/cutoff",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/expired-jobs",
-      "schedule": "*/30 * * * *"
-    }
-  ],
   "rewrites": [
     {
       "source": "/api/cron/:path*",
