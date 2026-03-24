@@ -212,7 +212,12 @@ export const analyzeCandidateRoleFit = async (payload = {}) => {
 
 export const getJob = async (id) => {
     try {
-        const response = await apiFetch(`${API_URL}/jobs/${id}`);
+        const token = localStorage.getItem('token');
+        const response = await apiFetch(`${API_URL}/jobs/${id}`, {
+            headers: token
+                ? { Authorization: `Bearer ${token}` }
+                : undefined
+        });
         if (!response.ok) throw new Error('Failed to fetch job');
         const result = await response.json();
         return result.data;
