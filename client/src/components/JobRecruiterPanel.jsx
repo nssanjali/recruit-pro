@@ -5,8 +5,7 @@ import {
     Clock, Zap, ChevronRight, Phone, Mail, TrendingUp
 } from 'lucide-react';
 import { Badge, Button } from './ui';
-
-const API_URL = 'http://localhost:5000/api';
+import { API_URL } from '../lib/apiBase';
 
 async function fetchMappedRecruiters(jobId) {
     const token = localStorage.getItem('token');

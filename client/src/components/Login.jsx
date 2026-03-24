@@ -15,6 +15,7 @@ import {
     Users
 } from 'lucide-react';
 import { Card, Button, Input, Badge } from './ui';
+import { API_ORIGIN, buildApiUrl } from '../lib/apiBase';
 
 export function Login({ onSwitchToSignup, onForgotPassword }) {
     const navigate = useNavigate();
@@ -38,7 +39,7 @@ export function Login({ onSwitchToSignup, onForgotPassword }) {
         setError('');
 
         try {
-            const response = await fetch('http://localhost:5000/api/auth/login', {
+            const response = await fetch(buildApiUrl('/auth/login'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -63,7 +64,7 @@ export function Login({ onSwitchToSignup, onForgotPassword }) {
     };
 
     const handleOAuthLogin = (provider) => {
-        window.location.href = `http://localhost:5000/api/auth/${provider}`;
+        window.location.href = `${API_ORIGIN}/api/auth/${provider}`;
     };
 
     return (

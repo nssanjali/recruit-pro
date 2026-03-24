@@ -15,6 +15,7 @@ import {
     Users
 } from 'lucide-react';
 import { Card, Button, Input, Badge } from './ui';
+import { API_ORIGIN, buildApiUrl } from '../lib/apiBase';
 
 export function Signup({ onSwitchToLogin }) {
     const navigate = useNavigate();
@@ -61,7 +62,7 @@ export function Signup({ onSwitchToLogin }) {
                 role: formData.role
             };
 
-            const response = await fetch('http://localhost:5000/api/auth/register', {
+            const response = await fetch(buildApiUrl('/auth/register'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -91,7 +92,7 @@ export function Signup({ onSwitchToLogin }) {
     };
 
     const handleOAuthSignup = (provider) => {
-        window.location.href = `http://localhost:5000/api/auth/${provider}`;
+        window.location.href = `${API_ORIGIN}/api/auth/${provider}`;
     };
 
     return (

@@ -14,8 +14,9 @@ import {
     MapPin, TrendingUp, CalendarDays, Building
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { API_URL, buildApiUrl } from '../lib/apiBase';
 
-const API = 'http://localhost:5000/api';
+const API = API_URL;
 const token = () => localStorage.getItem('token');
 const authHdr = () => ({ Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' });
 const apiFetch = async (path, opts = {}) => {
@@ -114,7 +115,7 @@ function EventDrawer({ event, onClose }) {
     const handleSave = async () => {
         setIsSaving(true);
         try {
-            const response = await fetch(`http://localhost:5000/api/jobs/${event.id}`, {
+            const response = await fetch(buildApiUrl(`/jobs/${event.id}`), {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

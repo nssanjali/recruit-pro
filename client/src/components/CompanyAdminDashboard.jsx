@@ -40,8 +40,9 @@ import { toast } from 'sonner';
 import { RecruiterManagement } from './RecruiterManagement';
 import { JobRecruiterPanel } from './JobRecruiterPanel';
 import { getApplicationStatusLabel, normalizeApplicationStatus } from '../lib/applicationStatus';
+import { API_URL } from '../lib/apiBase';
 
-const API = 'http://localhost:5000/api';
+const API = API_URL;
 const apiFetch = async (path, opts = {}) => {
     const token = localStorage.getItem('token');
     const response = await fetch(`${API}${path}`, {
@@ -818,4 +819,3 @@ export function CompanyAdminDashboard({ user }) {
         </div >
     );
 }
-

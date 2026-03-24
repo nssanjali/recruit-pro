@@ -16,6 +16,7 @@ import {
     CheckCircle2
 } from 'lucide-react';
 import { Card, Button, Input, Badge } from './ui';
+import { buildApiUrl } from '../lib/apiBase';
 
 export function CompanySignup({ onSwitchToLogin }) {
     const navigate = useNavigate();
@@ -134,7 +135,7 @@ export function CompanySignup({ onSwitchToLogin }) {
                 }
             };
 
-            const response = await fetch('http://localhost:5000/api/auth/register-company', {
+            const response = await fetch(buildApiUrl('/auth/register-company'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

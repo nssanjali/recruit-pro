@@ -15,6 +15,7 @@ import {
 } from './ui';
 import { Building, Clock, Gauge, MapPin, Search, ShieldAlert, ShieldCheck, Sparkles, Upload } from 'lucide-react';
 import { analyzeCandidateRoleFit, getApplications, getJobs, updateUserDetails, uploadFile } from '../lib/api';
+import { buildApiUrl } from '../lib/apiBase';
 import { getApplicationStatusLabel, normalizeApplicationStatus } from '../lib/applicationStatus';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -47,7 +48,7 @@ export function CandidateDashboard({ user }) {
     const fetchLiveUser = async () => {
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch('http://localhost:5000/api/auth/me', {
+            const res = await fetch(buildApiUrl('/auth/me'), {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const data = await res.json();

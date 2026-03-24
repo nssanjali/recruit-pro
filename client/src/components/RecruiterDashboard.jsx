@@ -28,8 +28,9 @@ import {
 import { toast } from 'sonner';
 import { getJobs } from '../lib/api';
 import { getMyRecruiterProfile } from '../lib/recruiterApi';
+import { API_URL } from '../lib/apiBase';
 
-const API = 'http://localhost:5000/api';
+const API = API_URL;
 const authHeaders = () => ({
     Authorization: `Bearer ${localStorage.getItem('token')}`,
     'Content-Type': 'application/json'

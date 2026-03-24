@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Button, Avatar, AvatarFallback, Badge } from './ui';
 import { motion, AnimatePresence } from 'motion/react';
+import { buildApiUrl } from '../lib/apiBase';
 
 // Animated Hamburger Menu Icon
 function AnimatedMenuIcon({ isOpen, onClick }) {
@@ -106,7 +107,7 @@ export function Layout({ children, user, onLogout }) {
         setNotificationsError('');
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:5000/api/communications', {
+            const response = await fetch(buildApiUrl('/communications'), {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }

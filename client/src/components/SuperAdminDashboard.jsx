@@ -15,8 +15,7 @@ import { getJobs, getApplications } from '../lib/api';
 import { getRecruiters } from '../lib/recruiterApi';
 import { getUsers, getUserStats, removeUser, updateUserRole } from '../lib/userApi';
 import { normalizeApplicationStatus } from '../lib/applicationStatus';
-
-const API_URL = 'http://localhost:5000/api';
+import { API_URL } from '../lib/apiBase';
 
 export function SuperAdminDashboard() {
     const [loading, setLoading] = useState(true);

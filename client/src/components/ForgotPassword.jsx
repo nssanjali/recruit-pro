@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, Lock, ShieldCheck, ArrowRight, ArrowLeft, KeyRound, Sparkles } from 'lucide-react';
 import { Card, Button, Input, Badge } from './ui';
+import { buildApiUrl } from '../lib/apiBase';
 
 export function ForgotPassword({ onBackToLogin }) {
     const [step, setStep] = useState(1); // 1: Email, 2: OTP, 3: New Password
@@ -17,7 +18,7 @@ export function ForgotPassword({ onBackToLogin }) {
         setLoading(true);
         setError('');
         try {
-            const response = await fetch('http://localhost:5000/api/auth/forgotpassword', {
+            const response = await fetch(buildApiUrl('/auth/forgotpassword'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email }),
@@ -38,7 +39,7 @@ export function ForgotPassword({ onBackToLogin }) {
         setLoading(true);
         setError('');
         try {
-            const response = await fetch('http://localhost:5000/api/auth/verifyotp', {
+            const response = await fetch(buildApiUrl('/auth/verifyotp'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, otp }),
@@ -59,7 +60,7 @@ export function ForgotPassword({ onBackToLogin }) {
         setLoading(true);
         setError('');
         try {
-            const response = await fetch('http://localhost:5000/api/auth/resetpassword', {
+            const response = await fetch(buildApiUrl('/auth/resetpassword'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, otp, password: newPassword }),
