@@ -2,7 +2,43 @@
   "version": 2,
   "buildCommand": "cd client && npm ci && npm run build",
   "outputDirectory": "client/dist",
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 30
+    },
+    "api/cron/communications.js": {
+      "maxDuration": 60
+    },
+    "api/cron/cutoff.js": {
+      "maxDuration": 60
+    },
+    "api/cron/expired-jobs.js": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/communications",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/cutoff",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/expired-jobs",
+      "schedule": "*/30 * * * *"
+    }
+  ],
   "rewrites": [
+    {
+      "source": "/api/cron/:path*",
+      "destination": "/api/cron/:path*"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.js"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
