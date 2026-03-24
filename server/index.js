@@ -26,28 +26,35 @@ import { initializeCronJobs } from './services/cronService.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+const normalizeOrigin = (value) => String(value || '').trim().replace(/\/$/, '');
+
 /* =========================
    CORS CONFIGURATION
 ========================= */
 
 // Build whitelist from CLIENT_URL env var (supports comma-separated list)
 const rawClientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
-const allowedOrigins = rawClientUrl.split(',').map((u) => u.trim());
+const allowedOrigins = rawClientUrl
+    .split(',')
+    .map(normalizeOrigin)
+    .filter(Boolean);
 
 // Always allow localhost in development
 if (process.env.NODE_ENV !== 'production') {
     ['http://localhost:3000', 'http://localhost:5173'].forEach((origin) => {
-        if (!allowedOrigins.includes(origin)) allowedOrigins.push(origin);
+        const normalizedOrigin = normalizeOrigin(origin);
+        if (!allowedOrigins.includes(normalizedOrigin)) allowedOrigins.push(normalizedOrigin);
     });
 }
 
 app.use(
     cors({
         origin: (origin, callback) => {
+            const normalizedOrigin = normalizeOrigin(origin);
             // Allow requests with no origin (e.g. curl, mobile apps, same-origin)
-            if (!origin) return callback(null, true);
-            if (allowedOrigins.includes(origin)) return callback(null, true);
-            callback(new Error(`CORS: origin "${origin}" not allowed`));
+            if (!normalizedOrigin) return callback(null, true);
+            if (allowedOrigins.includes(normalizedOrigin)) return callback(null, true);
+            callback(new Error(`CORS: origin "${normalizedOrigin}" not allowed. Allowed origins: ${allowedOrigins.join(', ')}`));
         },
         credentials: true,
     })
