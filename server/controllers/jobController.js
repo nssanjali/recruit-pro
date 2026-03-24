@@ -1,3 +1,4 @@
+import jwt from 'jsonwebtoken';
 import Job from '../models/Job.js';
 import User from '../models/User.js';
 import Application from '../models/Application.js';
@@ -222,6 +223,26 @@ export const getJobs = async (req, res) => {
 // @access  Public
 export const getJob = async (req, res) => {
     try {
+        // Validate ObjectId format
+        if (!ObjectId.isValid(req.params.id)) {
+            console.error('Invalid job ID:', req.params.id);
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid job ID format'
+            });
+        }
+
+        // Try to set req.user if token is present
+        if (!req.user && req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+            const token = req.headers.authorization.split(' ')[1];
+            try {
+                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                req.user = await User.findById(decoded.id);
+            } catch (e) {
+                req.user = null;
+            }
+        }
+
         const job = await Job.findById(req.params.id);
         if (!job) {
             return res.status(404).json({
@@ -230,7 +251,7 @@ export const getJob = async (req, res) => {
             });
         }
 
-        // Candidates and unauthenticated users cannot view closed/draft jobs
+        // Allow unauthenticated users to view open jobs
         const isAdmin = req.user && ['admin', 'company_admin', 'recruiter'].includes(req.user.role);
         if (!isAdmin && job.status !== 'open') {
             return res.status(404).json({
@@ -239,7 +260,13 @@ export const getJob = async (req, res) => {
             });
         }
 
-        await enrichJobWithCompanyMedia(job);
+        // Log job object before enrichment
+        console.log('Fetched job:', job);
+        try {
+            await enrichJobWithCompanyMedia(job);
+        } catch (enrichErr) {
+            console.error('Error in enrichJobWithCompanyMedia:', enrichErr);
+        }
 
         // Public / candidate route — strip admin fields
         res.status(200).json({
@@ -247,6 +274,7 @@ export const getJob = async (req, res) => {
             data: isAdmin ? job : stripAdminFields(job)
         });
     } catch (error) {
+        console.error('Error in getJob:', error);
         res.status(500).json({
             success: false,
             message: 'Server Error'

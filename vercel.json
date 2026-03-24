@@ -3,7 +3,7 @@
   "buildCommand": "cd client && npm ci && npm run build",
   "outputDirectory": "client/dist",
   "functions": {
-    "server/index.js": {
+    "server/api/index.js": {
       "runtime": "nodejs20.x",
       "maxDuration": 30
     }
@@ -11,7 +11,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/server/index.js"
+      "destination": "/server/api/index.js"
     },
     {
       "source": "/(.*)",
