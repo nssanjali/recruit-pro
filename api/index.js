@@ -6,8 +6,8 @@
  * connection across warm invocations.
  */
 
-import connectDB from '../config/db.js';
-import app from '../index.js';
+import connectDB from '../server/config/db.js';
+import app from '../server/index.js';
 
 let isConnected = false;
 
